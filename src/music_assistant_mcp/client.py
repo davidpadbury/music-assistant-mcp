@@ -29,13 +29,17 @@ class MusicAssistantConnection:
         if self._client is not None:
             return self._client
 
-        self._client = MusicAssistantClient(self.url, None)
+        # Token is passed to constructor (required for schema 28+)
+        self._client = MusicAssistantClient(
+            server_url=self.url,
+            aiohttp_session=None,
+            token=self.token,
+        )
+        await self._client.connect()
 
-        # Connect with token if provided (required for schema 28+)
-        if self.token:
-            await self._client.connect(token=self.token)
-        else:
-            await self._client.connect()
+        # Fetch initial state for players and queues
+        await self._client.players.fetch_state()
+        await self._client.player_queues.fetch_state()
 
         return self._client
 
