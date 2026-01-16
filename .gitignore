@@ -35,6 +35,7 @@ ENV/
 # Environment variables (may contain secrets)
 .env
 .env.local
+.mise.local.toml
 
 # OS
 .DS_Store

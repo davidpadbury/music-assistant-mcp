@@ -5,7 +5,7 @@ description = "MCP server for controlling Music Assistant"
 readme = "SKILL.md"
 requires-python = ">=3.11"
 dependencies = [
-    "mcp>=1.2.0",
+    "mcp[cli]>=1.2.0",
     "music-assistant-client>=1.0.0",
     "pydantic>=2.0.0",
 ]
