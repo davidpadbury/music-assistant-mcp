@@ -68,13 +68,18 @@ async def get_client() -> MusicAssistantClient:
 
     This is the main entry point for tools to get a connected client.
     The connection is established on first use and reused for subsequent calls.
+    If the connection has dropped, it will automatically reconnect.
     """
     global _connection
 
     if _connection is None:
         _connection = MusicAssistantConnection()
 
-    if _connection._client is None:
+    # Check if existing connection is still alive
+    if _connection._client is None or not _connection._client.connection.connected:
+        if _connection._client is not None:
+            # Clean up stale connection
+            await _connection.disconnect()
         await _connection.connect()
 
     return _connection.client
