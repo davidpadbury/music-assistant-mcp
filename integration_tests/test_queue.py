@@ -80,3 +80,15 @@ class TestQueueState:
         if items is not None and not isinstance(items, int):
             # If it's a list, verify we can iterate it
             assert hasattr(items, "__iter__"), "Queue items should be iterable"
+
+
+class TestTransferQueue:
+    """Tests for ma_transfer_queue functionality."""
+
+    async def test_transfer_queue(
+        self, client: MusicAssistantClient, two_player_ids: tuple[str, str]
+    ):
+        """Transfer queue executes without error."""
+        source_id, target_id = two_player_ids
+        # Transfer from source to target (may be no-op if queue is empty)
+        await client.player_queues.transfer_queue(source_id, target_id)

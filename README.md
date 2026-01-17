@@ -65,6 +65,7 @@ Add this configuration to:
 |------|---------|
 | `ma_queue` | Get queue contents, set shuffle/repeat, or clear the queue |
 | `ma_queue_item` | Move or remove specific items in the queue |
+| `ma_transfer_queue` | Transfer playback from one player to another |
 
 ### Music Library Tools
 
@@ -104,6 +105,13 @@ Add this configuration to:
 - Pause: ma_playback(queue_id="living_room", command="pause")
 - Skip: ma_playback(queue_id="living_room", command="next")
 - Volume: ma_volume(player_id="living_room", level=50)
+```
+
+### Transfer Playback to Another Room
+
+```
+ma_transfer_queue(source_queue_id="living_room", target_queue_id="kitchen")
+→ Music moves to kitchen, continuing from the same position
 ```
 
 ## Understanding IDs

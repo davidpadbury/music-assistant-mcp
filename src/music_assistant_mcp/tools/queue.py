@@ -194,3 +194,24 @@ def register_tools(
             return f"Removed item {params.item_id} from queue"
 
         return f"Unknown action: {params.action}"
+
+    class TransferQueueInput(BaseModel):
+        """Input for transferring a queue between players."""
+
+        source_queue_id: str = Field(description="The queue/player to transfer from")
+        target_queue_id: str = Field(description="The queue/player to transfer to")
+
+    @mcp.tool()
+    async def ma_transfer_queue(params: TransferQueueInput) -> str:
+        """Transfer playback from one player to another.
+
+        Moves the entire playback state (queue, position, settings) from the
+        source player to the target player.
+
+        Example: Transfer what's playing on the kitchen speaker to the living room.
+        """
+        client = await get_client()
+        await client.player_queues.transfer_queue(
+            params.source_queue_id, params.target_queue_id
+        )
+        return f"Transferred queue from {params.source_queue_id} to {params.target_queue_id}"

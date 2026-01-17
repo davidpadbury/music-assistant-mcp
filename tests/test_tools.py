@@ -40,6 +40,7 @@ def test_queue_tools_register():
     tool_names = [t.name for t in mcp._tool_manager._tools.values()]
     assert "ma_queue" in tool_names
     assert "ma_queue_item" in tool_names
+    assert "ma_transfer_queue" in tool_names
 
 
 def test_music_tools_register():
@@ -53,7 +54,7 @@ def test_music_tools_register():
 
 
 def test_all_tools_register():
-    """Test that all 9 tools register without conflict."""
+    """Test that all 10 tools register without conflict."""
     mcp = FastMCP("test")
     players.register_tools(mcp, mock_get_client)
     playback.register_tools(mcp, mock_get_client)
@@ -61,7 +62,7 @@ def test_all_tools_register():
     music.register_tools(mcp, mock_get_client)
 
     tool_names = [t.name for t in mcp._tool_manager._tools.values()]
-    assert len(tool_names) == 9
+    assert len(tool_names) == 10
 
     expected_tools = [
         "ma_list_players",
@@ -71,6 +72,7 @@ def test_all_tools_register():
         "ma_play_media",
         "ma_queue",
         "ma_queue_item",
+        "ma_transfer_queue",
         "ma_search",
         "ma_browse",
     ]
