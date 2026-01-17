@@ -1,11 +1,36 @@
----
-name: music-assistant
-description: Control Music Assistant to manage speakers, playback, queues, and browse music libraries. Use when the user wants to play music, control Sonos or other speakers, manage playlists, group speakers together, or search for songs and artists.
----
+# Music Assistant MCP Server
 
-# Music Assistant Control
+An MCP (Model Context Protocol) server for controlling [Music Assistant](https://music-assistant.io/) - manage multi-room audio, Sonos speakers, playback queues, and search across music providers.
 
-This skill provides tools to control a Music Assistant server for managing multi-room audio playback.
+## Installation
+
+```bash
+# Clone and install
+git clone https://github.com/davidpadbury/music-assistant-skill.git
+cd music-assistant-skill
+uv sync
+```
+
+## Configuration
+
+1. Generate a long-lived token from Music Assistant (Settings > Users > Long-lived access token)
+
+2. Add to Claude Code settings (`~/.claude.json`):
+
+```json
+{
+  "mcpServers": {
+    "music-assistant": {
+      "command": "uv",
+      "args": ["run", "--directory", "/path/to/music-assistant-skill", "music-assistant-mcp"],
+      "env": {
+        "MUSIC_ASSISTANT_URL": "http://your-server:8095",
+        "MUSIC_ASSISTANT_TOKEN": "your_token_here"
+      }
+    }
+  }
+}
+```
 
 ## Quick Start
 

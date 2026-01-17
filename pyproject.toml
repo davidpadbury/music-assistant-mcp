@@ -2,7 +2,7 @@
 name = "music-assistant-mcp"
 version = "0.1.0"
 description = "MCP server for controlling Music Assistant"
-readme = "SKILL.md"
+readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "mcp[cli]>=1.2.0",
