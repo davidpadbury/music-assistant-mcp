@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "music-assistant": {
+      "command": "uv",
+      "args": ["run", "music-assistant-mcp"],
+      "env": {
+        "MUSIC_ASSISTANT_URL": "${MUSIC_ASSISTANT_URL}",
+        "MUSIC_ASSISTANT_TOKEN": "${MUSIC_ASSISTANT_TOKEN}"
+      }
+    }
+  }
+}

@@ -2,8 +2,12 @@
 uv = "latest"
 
 [tasks.test]
-description = "Run tests"
-run = "uv run pytest"
+description = "Run unit tests"
+run = "uv run pytest tests/"
+
+[tasks."test:integration"]
+description = "Run integration tests (requires MUSIC_ASSISTANT_URL)"
+run = "uv run pytest integration_tests/"
 
 [tasks.lint]
 description = "Run ruff linter"
