@@ -1,28 +1,27 @@
 # Music Assistant MCP Server
 
-An MCP (Model Context Protocol) server for controlling [Music Assistant](https://music-assistant.io/) - manage multi-room audio, Sonos speakers, playback queues, and search across music providers.
+An MCP (Model Context Protocol) server for controlling [Music Assistant](https://music-assistant.io/) - manage multi-room audio, playback queues, and search across music providers.
+
+## Prerequisites
+
+- A running [Music Assistant](https://music-assistant.io/) server
+- A long-lived access token (Settings > Users > Long-lived access token)
 
 ## Installation
 
-```bash
-# Clone and install
-git clone https://github.com/davidpadbury/music-assistant-mcp.git
-cd music-assistant-mcp
-uv sync
-```
+### Using uvx (recommended)
 
-## Configuration
-
-1. Generate a long-lived token from Music Assistant (Settings > Users > Long-lived access token)
-
-2. Add to Claude Code settings (`~/.claude.json`):
+No installation required. Configure your MCP client to run directly from GitHub:
 
 ```json
 {
   "mcpServers": {
     "music-assistant": {
-      "command": "uv",
-      "args": ["run", "--directory", "/path/to/music-assistant-skill", "music-assistant-mcp"],
+      "command": "uvx",
+      "args": [
+        "--from", "git+https://github.com/davidpadbury/music-assistant-mcp",
+        "music-assistant-mcp"
+      ],
       "env": {
         "MUSIC_ASSISTANT_URL": "http://your-server:8095",
         "MUSIC_ASSISTANT_TOKEN": "your_token_here"
@@ -31,6 +30,81 @@ uv sync
   }
 }
 ```
+
+### From source
+
+```bash
+git clone https://github.com/davidpadbury/music-assistant-mcp.git
+cd music-assistant-mcp
+uv sync
+```
+
+Then configure your MCP client:
+
+```json
+{
+  "mcpServers": {
+    "music-assistant": {
+      "command": "uv",
+      "args": ["run", "--directory", "/path/to/music-assistant-mcp", "music-assistant-mcp"],
+      "env": {
+        "MUSIC_ASSISTANT_URL": "http://your-server:8095",
+        "MUSIC_ASSISTANT_TOKEN": "your_token_here"
+      }
+    }
+  }
+}
+```
+
+## Client Configuration
+
+### Claude Desktop
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+
+```json
+{
+  "mcpServers": {
+    "music-assistant": {
+      "command": "uvx",
+      "args": [
+        "--from", "git+https://github.com/davidpadbury/music-assistant-mcp",
+        "music-assistant-mcp"
+      ],
+      "env": {
+        "MUSIC_ASSISTANT_URL": "http://your-server:8095",
+        "MUSIC_ASSISTANT_TOKEN": "your_token_here"
+      }
+    }
+  }
+}
+```
+
+### Claude Code
+
+Add to `~/.claude.json`:
+
+```json
+{
+  "mcpServers": {
+    "music-assistant": {
+      "command": "uvx",
+      "args": [
+        "--from", "git+https://github.com/davidpadbury/music-assistant-mcp",
+        "music-assistant-mcp"
+      ],
+      "env": {
+        "MUSIC_ASSISTANT_URL": "http://your-server:8095",
+        "MUSIC_ASSISTANT_TOKEN": "your_token_here"
+      }
+    }
+  }
+}
+```
+
+### Cursor
+
+Open Settings > MCP and add the server configuration.
 
 ## Quick Start
 
@@ -105,7 +179,7 @@ uv sync
 
 ## Understanding IDs
 
-- **player_id**: Identifies a speaker (e.g., "sonos_living_room"). Get from `ma_list_players`
+- **player_id**: Identifies a speaker (e.g., "living_room"). Get from `ma_list_players`
 - **queue_id**: Usually the same as player_id. Each player has its own queue
 - **item_id**: Identifies a track in a queue. Get from `ma_queue`
 - **URI**: Identifies a media item (e.g., "spotify://track/abc123"). Get from `ma_search` or `ma_browse`
@@ -117,3 +191,7 @@ uv sync
 - When grouping speakers, the `target_player_id` becomes the group leader
 - Queue IDs are typically the same as player IDs
 - Use `option="add"` with `ma_play_media` to add to queue without interrupting current playback
+
+## License
+
+MIT
