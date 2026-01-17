@@ -6,8 +6,8 @@ An MCP (Model Context Protocol) server for controlling [Music Assistant](https:/
 
 ```bash
 # Clone and install
-git clone https://github.com/davidpadbury/music-assistant-skill.git
-cd music-assistant-skill
+git clone https://github.com/davidpadbury/music-assistant-mcp.git
+cd music-assistant-mcp
 uv sync
 ```
 
