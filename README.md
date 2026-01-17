@@ -6,12 +6,11 @@ An MCP (Model Context Protocol) server for controlling [Music Assistant](https:/
 
 - A running [Music Assistant](https://music-assistant.io/) server
 - A long-lived access token (Settings > Users > Long-lived access token)
+- [uv](https://docs.astral.sh/uv/) installed
 
 ## Installation
 
-### Using uvx (recommended)
-
-No installation required. Configure your MCP client to run directly from GitHub:
+No local installation required. Configure your MCP client to run directly from GitHub using `uvx`:
 
 ```json
 {
@@ -31,80 +30,10 @@ No installation required. Configure your MCP client to run directly from GitHub:
 }
 ```
 
-### From source
-
-```bash
-git clone https://github.com/davidpadbury/music-assistant-mcp.git
-cd music-assistant-mcp
-uv sync
-```
-
-Then configure your MCP client:
-
-```json
-{
-  "mcpServers": {
-    "music-assistant": {
-      "command": "uv",
-      "args": ["run", "--directory", "/path/to/music-assistant-mcp", "music-assistant-mcp"],
-      "env": {
-        "MUSIC_ASSISTANT_URL": "http://your-server:8095",
-        "MUSIC_ASSISTANT_TOKEN": "your_token_here"
-      }
-    }
-  }
-}
-```
-
-## Client Configuration
-
-### Claude Desktop
-
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
-
-```json
-{
-  "mcpServers": {
-    "music-assistant": {
-      "command": "uvx",
-      "args": [
-        "--from", "git+https://github.com/davidpadbury/music-assistant-mcp",
-        "music-assistant-mcp"
-      ],
-      "env": {
-        "MUSIC_ASSISTANT_URL": "http://your-server:8095",
-        "MUSIC_ASSISTANT_TOKEN": "your_token_here"
-      }
-    }
-  }
-}
-```
-
-### Claude Code
-
-Add to `~/.claude.json`:
-
-```json
-{
-  "mcpServers": {
-    "music-assistant": {
-      "command": "uvx",
-      "args": [
-        "--from", "git+https://github.com/davidpadbury/music-assistant-mcp",
-        "music-assistant-mcp"
-      ],
-      "env": {
-        "MUSIC_ASSISTANT_URL": "http://your-server:8095",
-        "MUSIC_ASSISTANT_TOKEN": "your_token_here"
-      }
-    }
-  }
-}
-```
-
-### Cursor
-
-Open Settings > MCP and add the server configuration.
+Add this configuration to:
+- **Claude Desktop**: `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows)
+- **Claude Code**: `~/.claude.json`
+- **Cursor**: Settings > MCP
 
 ## Quick Start
 
