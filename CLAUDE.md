@@ -51,3 +51,8 @@ After editing source files, ask the user to reconnect the MCP server (`/mcp` com
   - `formatting.py` - Response formatting
 - `tests/` - Unit tests
 - `integration_tests/` - Tests against real Music Assistant instance
+
+## Reference Documentation
+
+- [Music Assistant](https://www.music-assistant.io/) - Features and capabilities
+- [Music Assistant Client](https://github.com/music-assistant/client) - Python client API
