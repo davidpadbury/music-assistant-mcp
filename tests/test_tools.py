@@ -1,5 +1,6 @@
 """Tests for MCP tools registration."""
 
+import pytest
 from mcp.server.fastmcp import FastMCP
 
 from music_assistant_mcp.tools import music, playback, players, queue
@@ -75,3 +76,39 @@ def test_all_tools_register():
     ]
     for tool in expected_tools:
         assert tool in tool_names, f"Missing tool: {tool}"
+
+
+@pytest.mark.asyncio
+async def test_format_queue_state_fetches_items_from_api():
+    """Test that format_queue_state fetches items via API, not from queue.items.
+
+    The queue.items attribute is an int (count), not a list. This test ensures
+    we call get_queue_items() to fetch actual items.
+    """
+
+    class StubQueue:
+        queue_id = "test_queue"
+        items = 2  # This is a COUNT, not a list!
+        shuffle_enabled = False
+        repeat_mode = "off"
+        current_item = None
+
+    class StubPlayerQueues:
+        def __iter__(self):
+            return iter([StubQueue()])
+
+        async def get_queue_items(
+            self, queue_id: str, limit: int = 500, offset: int = 0
+        ):
+            class Item:
+                def __init__(self, name, queue_item_id):
+                    self.name = name
+                    self.queue_item_id = queue_item_id
+
+            return [Item("Track One", "item_1"), Item("Track Two", "item_2")]
+
+    result = await queue.format_queue_state(StubPlayerQueues(), "test_queue")
+
+    assert "Track One" in result
+    assert "Track Two" in result
+    assert "item_1" in result

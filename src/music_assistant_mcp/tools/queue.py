@@ -1,16 +1,82 @@
 """Queue management tools for Music Assistant MCP server."""
 
 from collections.abc import Awaitable, Callable
-from typing import Literal
+from typing import TYPE_CHECKING, Literal, Protocol
 
 from mcp.server.fastmcp import FastMCP
-from music_assistant_client import MusicAssistantClient
 from music_assistant_models.enums import RepeatMode
 from pydantic import BaseModel, Field
 
+if TYPE_CHECKING:
+    from music_assistant_client import MusicAssistantClient
+
+
+class PlayerQueuesProtocol(Protocol):
+    """Protocol for player_queues interface used by queue formatting."""
+
+    def __iter__(self): ...
+    async def get_queue_items(
+        self, queue_id: str, limit: int = 500, offset: int = 0
+    ): ...
+
+
+async def format_queue_state(player_queues: PlayerQueuesProtocol, queue_id: str) -> str:
+    """Format queue state for display.
+
+    This is the core logic extracted for testability.
+    """
+    # Find the queue in the client's queue list
+    queue = None
+    for q in player_queues:
+        if q.queue_id == queue_id:
+            queue = q
+            break
+
+    if queue is None:
+        return f"Queue not found: {queue_id}. Use ma_list_players to find valid IDs."
+
+    lines = [f"# Queue: {queue_id}\n"]
+
+    # Queue settings
+    settings = []
+    if hasattr(queue, "shuffle_enabled"):
+        settings.append(f"Shuffle: {'on' if queue.shuffle_enabled else 'off'}")
+    if hasattr(queue, "repeat_mode"):
+        settings.append(f"Repeat: {queue.repeat_mode}")
+    if settings:
+        lines.append(f"**Settings:** {' | '.join(settings)}\n")
+
+    # Current track
+    if hasattr(queue, "current_item") and queue.current_item:
+        item = queue.current_item
+        name = getattr(item, "name", "Unknown")
+        artist = ""
+        if hasattr(item, "media_item") and item.media_item:
+            if hasattr(item.media_item, "artists") and item.media_item.artists:
+                artist = f" by {item.media_item.artists[0].name}"
+        lines.append(f"**Now Playing:** {name}{artist}\n")
+
+    # Queue items - queue.items is an int (count), fetch actual items via API
+    if queue.items > 0:
+        queue_items = await player_queues.get_queue_items(queue_id, limit=20)
+        if queue_items:
+            lines.append("**Queue:**")
+            for i, item in enumerate(queue_items, 1):
+                name = getattr(item, "name", "Unknown")
+                item_id = getattr(item, "queue_item_id", "unknown")
+                lines.append(f"{i}. {name} (`{item_id}`)")
+            if queue.items > 20:
+                lines.append(f"... and {queue.items - 20} more items")
+        else:
+            lines.append("Queue is empty")
+    else:
+        lines.append("Queue is empty")
+
+    return "\n".join(lines)
+
 
 def register_tools(
-    mcp: FastMCP, get_client: Callable[[], Awaitable[MusicAssistantClient]]
+    mcp: FastMCP, get_client: Callable[[], Awaitable["MusicAssistantClient"]]
 ):
     """Register queue management tools with the MCP server."""
 
@@ -68,54 +134,10 @@ def register_tools(
 
         # Get queue state
         if params.get_items and not params.clear:
-            # Find the queue in the client's queue list
-            queue = None
-            for q in client.player_queues:
-                if q.queue_id == params.queue_id:
-                    queue = q
-                    break
-
-            if queue is None:
-                return f"Queue not found: {params.queue_id}. Use ma_list_players to find valid IDs."
-
-            lines = [f"# Queue: {params.queue_id}\n"]
-
-            # Queue settings
-            settings = []
-            if hasattr(queue, "shuffle_enabled"):
-                settings.append(f"Shuffle: {'on' if queue.shuffle_enabled else 'off'}")
-            if hasattr(queue, "repeat_mode"):
-                settings.append(f"Repeat: {queue.repeat_mode}")
-            if settings:
-                lines.append(f"**Settings:** {' | '.join(settings)}\n")
-
-            # Current track
-            if hasattr(queue, "current_item") and queue.current_item:
-                item = queue.current_item
-                name = getattr(item, "name", "Unknown")
-                artist = ""
-                if hasattr(item, "media_item") and item.media_item:
-                    if hasattr(item.media_item, "artists") and item.media_item.artists:
-                        artist = f" by {item.media_item.artists[0].name}"
-                lines.append(f"**Now Playing:** {name}{artist}\n")
-
-            # Queue items (note: library has incorrect type annotation for items)
-            queue_items = getattr(queue, "items", None)
-            if queue_items:
-                lines.append("**Queue:**")
-                for i, item in enumerate(queue_items[:20], 1):  # Limit to 20 items
-                    name = getattr(item, "name", "Unknown")
-                    item_id = getattr(item, "queue_item_id", "unknown")
-                    lines.append(f"{i}. {name} (`{item_id}`)")
-                if len(queue_items) > 20:
-                    lines.append(f"... and {len(queue_items) - 20} more items")
-            else:
-                lines.append("Queue is empty")
-
+            output = await format_queue_state(queues, params.queue_id)
             if results:
-                lines.insert(0, "**Changes applied:** " + ", ".join(results) + "\n")
-
-            return "\n".join(lines)
+                return "**Changes applied:** " + ", ".join(results) + "\n\n" + output
+            return output
 
         if results:
             return "Changes applied: " + ", ".join(results)
