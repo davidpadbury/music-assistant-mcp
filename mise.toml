@@ -21,6 +21,10 @@ run = "uv run ruff format ."
 description = "Check code formatting"
 run = "uv run ruff format . --check"
 
+[tasks.typecheck]
+description = "Run ty type checker"
+run = "uv run ty check src"
+
 [tasks.check]
-description = "Run all checks (lint, format, test)"
-depends = ["lint", "format-check", "test"]
+description = "Run all checks (lint, format, typecheck, test)"
+depends = ["lint", "format-check", "typecheck", "test"]

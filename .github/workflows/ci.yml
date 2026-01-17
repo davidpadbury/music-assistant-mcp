@@ -30,5 +30,8 @@ jobs:
       - name: Format check
         run: uv run ruff format . --check
 
+      - name: Type check
+        run: uv run ty check src
+
       - name: Test
         run: uv run pytest

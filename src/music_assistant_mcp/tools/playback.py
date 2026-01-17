@@ -5,6 +5,7 @@ from typing import Literal
 
 from mcp.server.fastmcp import FastMCP
 from music_assistant_client import MusicAssistantClient
+from music_assistant_models.enums import QueueOption
 from pydantic import BaseModel, Field
 
 
@@ -116,13 +117,12 @@ def register_tools(
         # Normalize media to list
         media_list = params.media if isinstance(params.media, list) else [params.media]
 
-        # Map option to QueueOption enum value
-        # The client library expects specific enum values
+        # Map option string to QueueOption enum
         option_map = {
-            "play": "play",
-            "replace": "replace",
-            "next": "next",
-            "add": "add",
+            "play": QueueOption.PLAY,
+            "replace": QueueOption.REPLACE,
+            "next": QueueOption.NEXT,
+            "add": QueueOption.ADD,
         }
 
         await client.player_queues.play_media(

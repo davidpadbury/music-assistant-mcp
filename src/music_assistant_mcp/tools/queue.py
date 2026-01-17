@@ -5,6 +5,7 @@ from typing import Literal
 
 from mcp.server.fastmcp import FastMCP
 from music_assistant_client import MusicAssistantClient
+from music_assistant_models.enums import RepeatMode
 from pydantic import BaseModel, Field
 
 
@@ -57,7 +58,8 @@ def register_tools(
             results.append(f"Shuffle {state}")
 
         if params.repeat is not None:
-            await queues.repeat(params.queue_id, params.repeat)
+            repeat_mode = RepeatMode(params.repeat)
+            await queues.repeat(params.queue_id, repeat_mode)
             results.append(f"Repeat set to '{params.repeat}'")
 
         if params.clear:
@@ -97,14 +99,16 @@ def register_tools(
                         artist = f" by {item.media_item.artists[0].name}"
                 lines.append(f"**Now Playing:** {name}{artist}\n")
 
-            # Queue items
-            if hasattr(queue, "items") and queue.items:
+            # Queue items (note: library has incorrect type annotation for items)
+            queue_items = getattr(queue, "items", None)
+            if queue_items:
                 lines.append("**Queue:**")
-                for i, item in enumerate(queue.items[:20], 1):  # Limit to 20 items
+                for i, item in enumerate(queue_items[:20], 1):  # Limit to 20 items
                     name = getattr(item, "name", "Unknown")
-                    lines.append(f"{i}. {name} (`{item.queue_item_id}`)")
-                if len(queue.items) > 20:
-                    lines.append(f"... and {len(queue.items) - 20} more items")
+                    item_id = getattr(item, "queue_item_id", "unknown")
+                    lines.append(f"{i}. {name} (`{item_id}`)")
+                if len(queue_items) > 20:
+                    lines.append(f"... and {len(queue_items) - 20} more items")
             else:
                 lines.append("Queue is empty")
 

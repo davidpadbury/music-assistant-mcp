@@ -4,6 +4,7 @@ from collections.abc import Awaitable, Callable
 
 from mcp.server.fastmcp import FastMCP
 from music_assistant_client import MusicAssistantClient
+from music_assistant_models.enums import MediaType
 from pydantic import BaseModel, Field
 
 
@@ -46,10 +47,16 @@ def register_tools(
         """
         client = await get_client()
 
+        # Convert string media types to enum, default to all types
+        if params.media_types:
+            media_types = [MediaType(mt) for mt in params.media_types]
+        else:
+            media_types = MediaType.ALL
+
         # Perform search
         results = await client.music.search(
             search_query=params.query,
-            media_types=params.media_types,
+            media_types=media_types,
             limit=params.limit,
         )
 

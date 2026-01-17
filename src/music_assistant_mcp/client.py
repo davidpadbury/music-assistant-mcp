@@ -13,14 +13,16 @@ class MusicAssistantConnection:
         url: str | None = None,
         token: str | None = None,
     ):
-        self.url = url or os.environ.get("MUSIC_ASSISTANT_URL")
+        resolved_url = url or os.environ.get("MUSIC_ASSISTANT_URL")
+        if not resolved_url:
+            raise ValueError(
+                "Music Assistant URL required. "
+                "Set MUSIC_ASSISTANT_URL environment variable or pass url parameter."
+            )
+
+        self.url: str = resolved_url
         self.token = token or os.environ.get("MUSIC_ASSISTANT_TOKEN")
         self._client: MusicAssistantClient | None = None
-
-        if not self.url:
-            raise ValueError(
-                "Music Assistant URL required. Set MUSIC_ASSISTANT_URL environment variable or pass url parameter."
-            )
 
     async def connect(self) -> MusicAssistantClient:
         """Establish connection to Music Assistant server."""
