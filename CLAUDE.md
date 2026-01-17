@@ -56,3 +56,4 @@ After editing source files, ask the user to reconnect the MCP server (`/mcp` com
 
 - [Music Assistant](https://www.music-assistant.io/) - Features and capabilities
 - [Music Assistant Client](https://github.com/music-assistant/client) - Python client API
+- [Writing Tools for Agents](https://www.anthropic.com/engineering/writing-tools-for-agents) - Anthropic's guide to MCP tool design

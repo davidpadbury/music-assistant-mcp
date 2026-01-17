@@ -167,6 +167,19 @@ def register_tools(
         folders = []
         media = []
 
+        def get_browse_path(uri: str | None) -> str | None:
+            """Convert URI to browse path by removing 'folder/' segment.
+
+            The Music Assistant API returns URIs like 'provider://folder/albums'
+            but browse() expects paths like 'provider://albums'.
+            """
+            if not uri:
+                return None
+            # Transform: provider://folder/subpath -> provider://subpath
+            if "://folder/" in uri:
+                return uri.replace("://folder/", "://")
+            return uri
+
         for item in items:
             name = getattr(item, "name", "Unknown")
             uri = getattr(item, "uri", None)
@@ -181,19 +194,20 @@ def register_tools(
                 "provider",
             ]
 
-            entry = {"name": name, "uri": uri, "type": item_type}
-
             if is_folder:
-                folders.append(entry)
+                # Folders need path transformed for browse navigation
+                browse_path = get_browse_path(uri)
+                folders.append({"name": name, "path": browse_path, "type": item_type})
             else:
-                media.append(entry)
+                # Media items use 'uri' for playback
+                media.append({"name": name, "uri": uri, "type": item_type})
 
         # Display folders first
         if folders:
             lines.append("## Folders")
             for item in folders:
-                uri_str = f" → `{item['uri']}`" if item["uri"] else ""
-                lines.append(f"- 📁 {item['name']}{uri_str}")
+                path_str = f" → `{item['path']}`" if item["path"] else ""
+                lines.append(f"- 📁 {item['name']}{path_str}")
             lines.append("")
 
         # Then media items
