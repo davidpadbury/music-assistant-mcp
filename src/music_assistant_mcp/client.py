@@ -1,7 +1,6 @@
 """Music Assistant client connection management."""
 
 import os
-from typing import Optional
 
 from music_assistant_client import MusicAssistantClient
 
@@ -11,17 +10,16 @@ class MusicAssistantConnection:
 
     def __init__(
         self,
-        url: Optional[str] = None,
-        token: Optional[str] = None,
+        url: str | None = None,
+        token: str | None = None,
     ):
         self.url = url or os.environ.get("MUSIC_ASSISTANT_URL")
         self.token = token or os.environ.get("MUSIC_ASSISTANT_TOKEN")
-        self._client: Optional[MusicAssistantClient] = None
+        self._client: MusicAssistantClient | None = None
 
         if not self.url:
             raise ValueError(
-                "Music Assistant URL required. Set MUSIC_ASSISTANT_URL environment variable "
-                "or pass url parameter."
+                "Music Assistant URL required. Set MUSIC_ASSISTANT_URL environment variable or pass url parameter."
             )
 
     async def connect(self) -> MusicAssistantClient:
@@ -60,7 +58,7 @@ class MusicAssistantConnection:
 
 
 # Global connection instance (lazy initialization)
-_connection: Optional[MusicAssistantConnection] = None
+_connection: MusicAssistantConnection | None = None
 
 
 async def get_client() -> MusicAssistantClient:

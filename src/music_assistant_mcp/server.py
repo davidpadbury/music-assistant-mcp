@@ -6,7 +6,7 @@ Provides tools for controlling Music Assistant through the Model Context Protoco
 from mcp.server.fastmcp import FastMCP
 
 from .client import get_client
-from .tools import players, playback, queue, music
+from .tools import music, playback, players, queue
 
 # Create the MCP server
 mcp = FastMCP("music-assistant")

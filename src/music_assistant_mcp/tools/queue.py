@@ -1,6 +1,7 @@
 """Queue management tools for Music Assistant MCP server."""
 
-from typing import Awaitable, Callable, Literal, Optional
+from collections.abc import Awaitable, Callable
+from typing import Literal
 
 from mcp.server.fastmcp import FastMCP
 from music_assistant_client import MusicAssistantClient
@@ -15,18 +16,16 @@ def register_tools(
     class QueueInput(BaseModel):
         """Input for queue state and settings."""
 
-        queue_id: str = Field(
-            description="The queue/player ID to get or modify"
-        )
+        queue_id: str = Field(description="The queue/player ID to get or modify")
         get_items: bool = Field(
             default=True,
             description="Include queue items in the response",
         )
-        shuffle: Optional[bool] = Field(
+        shuffle: bool | None = Field(
             default=None,
             description="Set shuffle mode: True to enable, False to disable",
         )
-        repeat: Optional[Literal["off", "one", "all"]] = Field(
+        repeat: Literal["off", "one", "all"] | None = Field(
             default=None,
             description="Set repeat mode: 'off', 'one' (repeat current track), or 'all' (repeat queue)",
         )
@@ -122,9 +121,7 @@ def register_tools(
     class QueueItemInput(BaseModel):
         """Input for managing individual queue items."""
 
-        queue_id: str = Field(
-            description="The queue/player ID"
-        )
+        queue_id: str = Field(description="The queue/player ID")
         item_id: str = Field(
             description="The queue item ID to manage (from ma_queue output)"
         )

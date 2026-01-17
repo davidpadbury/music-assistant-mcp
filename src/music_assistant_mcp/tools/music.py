@@ -1,6 +1,6 @@
 """Music library tools for Music Assistant MCP server."""
 
-from typing import Awaitable, Callable, Optional
+from collections.abc import Awaitable, Callable
 
 from mcp.server.fastmcp import FastMCP
 from music_assistant_client import MusicAssistantClient
@@ -19,11 +19,10 @@ def register_tools(
             min_length=1,
             description="Search query - artist name, album title, song name, or playlist",
         )
-        media_types: Optional[list[str]] = Field(
+        media_types: list[str] | None = Field(
             default=None,
             description=(
-                "Filter by media type(s): 'artist', 'album', 'track', 'playlist', 'radio'. "
-                "Omit to search all types."
+                "Filter by media type(s): 'artist', 'album', 'track', 'playlist', 'radio'. Omit to search all types."
             ),
         )
         limit: int = Field(
@@ -82,35 +81,35 @@ def register_tools(
         if hasattr(results, "artists") and results.artists:
             has_results = True
             lines.append("## Artists")
-            for item in results.artists[:params.limit]:
+            for item in results.artists[: params.limit]:
                 lines.append(format_item(item, "artist"))
             lines.append("")
 
         if hasattr(results, "albums") and results.albums:
             has_results = True
             lines.append("## Albums")
-            for item in results.albums[:params.limit]:
+            for item in results.albums[: params.limit]:
                 lines.append(format_item(item, "album"))
             lines.append("")
 
         if hasattr(results, "tracks") and results.tracks:
             has_results = True
             lines.append("## Tracks")
-            for item in results.tracks[:params.limit]:
+            for item in results.tracks[: params.limit]:
                 lines.append(format_item(item, "track"))
             lines.append("")
 
         if hasattr(results, "playlists") and results.playlists:
             has_results = True
             lines.append("## Playlists")
-            for item in results.playlists[:params.limit]:
+            for item in results.playlists[: params.limit]:
                 lines.append(format_item(item, "playlist"))
             lines.append("")
 
         if hasattr(results, "radio") and results.radio:
             has_results = True
             lines.append("## Radio Stations")
-            for item in results.radio[:params.limit]:
+            for item in results.radio[: params.limit]:
                 lines.append(format_item(item, "radio"))
             lines.append("")
 
@@ -123,7 +122,7 @@ def register_tools(
     class BrowseInput(BaseModel):
         """Input for browsing music."""
 
-        path: Optional[str] = Field(
+        path: str | None = Field(
             default=None,
             description=(
                 "Path to browse. Omit for root level (shows all providers). "
@@ -169,7 +168,11 @@ def register_tools(
             # Check if this is a navigable folder/container
             is_folder = (
                 hasattr(item, "is_folder") and item.is_folder
-            ) or item_type in ["library", "folder", "provider"]
+            ) or item_type in [
+                "library",
+                "folder",
+                "provider",
+            ]
 
             entry = {"name": name, "uri": uri, "type": item_type}
 
@@ -201,5 +204,7 @@ def register_tools(
                 lines.append(f"- {type_icon} {item['name']}{uri_str}")
             lines.append("")
 
-        lines.append("\n*Use folder paths with ma_browse to navigate. Use media URIs with ma_play_media to play.*")
+        lines.append(
+            "\n*Use folder paths with ma_browse to navigate. Use media URIs with ma_play_media to play.*"
+        )
         return "\n".join(lines)

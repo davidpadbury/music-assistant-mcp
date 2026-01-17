@@ -1,6 +1,7 @@
 """Player control tools for Music Assistant MCP server."""
 
-from typing import Awaitable, Callable, Literal, Optional
+from collections.abc import Awaitable, Callable
+from typing import Literal
 
 from mcp.server.fastmcp import FastMCP
 from music_assistant_client import MusicAssistantClient
@@ -42,7 +43,9 @@ def register_tools(
 
             # Group info
             if hasattr(player, "group_childs") and player.group_childs:
-                status_parts.append(f"Group leader with {len(player.group_childs)} members")
+                status_parts.append(
+                    f"Group leader with {len(player.group_childs)} members"
+                )
             elif hasattr(player, "synced_to") and player.synced_to:
                 status_parts.append(f"Synced to: {player.synced_to}")
 
@@ -62,17 +65,17 @@ def register_tools(
         player_id: str = Field(
             description="The player ID to control (use ma_list_players to find IDs)"
         )
-        level: Optional[int] = Field(
+        level: int | None = Field(
             default=None,
             ge=0,
             le=100,
             description="Set volume to this level (0-100). Omit to use adjust or mute instead.",
         )
-        adjust: Optional[Literal["up", "down"]] = Field(
+        adjust: Literal["up", "down"] | None = Field(
             default=None,
             description="Adjust volume up or down by a step. Omit to use level or mute instead.",
         )
-        mute: Optional[bool] = Field(
+        mute: bool | None = Field(
             default=None,
             description="Set mute state. True to mute, False to unmute. Omit to use level or adjust instead.",
         )
@@ -92,7 +95,11 @@ def register_tools(
 
         # Count how many options were provided
         options_provided = sum(
-            [params.level is not None, params.adjust is not None, params.mute is not None]
+            [
+                params.level is not None,
+                params.adjust is not None,
+                params.mute is not None,
+            ]
         )
 
         if options_provided == 0:
@@ -126,10 +133,8 @@ def register_tools(
         action: Literal["join", "leave"] = Field(
             description="'join' to add players to a group, 'leave' to remove from groups"
         )
-        player_ids: list[str] = Field(
-            description="List of player IDs to group/ungroup"
-        )
-        target_player_id: Optional[str] = Field(
+        player_ids: list[str] = Field(description="List of player IDs to group/ungroup")
+        target_player_id: str | None = Field(
             default=None,
             description="For 'join': the leader player to sync to. Required for join action.",
         )
@@ -152,9 +157,13 @@ def register_tools(
                 return "Error: target_player_id is required when joining a group"
 
             if len(params.player_ids) == 1:
-                await client.players.group(params.player_ids[0], params.target_player_id)
+                await client.players.group(
+                    params.player_ids[0], params.target_player_id
+                )
             else:
-                await client.players.group_many(params.target_player_id, params.player_ids)
+                await client.players.group_many(
+                    params.target_player_id, params.player_ids
+                )
 
             player_list = ", ".join(params.player_ids)
             return f"Players [{player_list}] joined to group led by {params.target_player_id}"

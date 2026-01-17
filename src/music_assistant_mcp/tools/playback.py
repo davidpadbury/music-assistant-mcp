@@ -1,6 +1,7 @@
 """Playback control tools for Music Assistant MCP server."""
 
-from typing import Awaitable, Callable, Literal, Optional, Union
+from collections.abc import Awaitable, Callable
+from typing import Literal
 
 from mcp.server.fastmcp import FastMCP
 from music_assistant_client import MusicAssistantClient
@@ -21,7 +22,7 @@ def register_tools(
         command: Literal["play", "pause", "stop", "toggle", "next", "previous"] = Field(
             description="Playback command: play, pause, stop, toggle (play/pause), next, previous"
         )
-        seek_seconds: Optional[int] = Field(
+        seek_seconds: int | None = Field(
             default=None,
             description="Optional: seek to this position in seconds (only with 'play' command)",
         )
@@ -46,7 +47,9 @@ def register_tools(
         if params.command == "play":
             if params.seek_seconds is not None:
                 await queues.seek(params.queue_id, params.seek_seconds)
-                return f"Seeked to {params.seek_seconds}s and playing on {params.queue_id}"
+                return (
+                    f"Seeked to {params.seek_seconds}s and playing on {params.queue_id}"
+                )
             await queues.play(params.queue_id)
             return f"Playing on {params.queue_id}"
 
@@ -75,10 +78,8 @@ def register_tools(
     class PlayMediaInput(BaseModel):
         """Input for playing media."""
 
-        queue_id: str = Field(
-            description="The queue/player ID to play on"
-        )
-        media: Union[str, list[str]] = Field(
+        queue_id: str = Field(description="The queue/player ID to play on")
+        media: str | list[str] = Field(
             description="Media URI(s) to play. Get URIs from ma_search or ma_browse."
         )
         option: Literal["play", "replace", "next", "add"] = Field(

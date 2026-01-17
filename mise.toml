@@ -1,2 +1,26 @@
 [tools]
 uv = "latest"
+
+[tasks.test]
+description = "Run tests"
+run = "uv run pytest"
+
+[tasks.lint]
+description = "Run ruff linter"
+run = "uv run ruff check ."
+
+[tasks.lint-fix]
+description = "Run ruff linter with auto-fix"
+run = "uv run ruff check . --fix"
+
+[tasks.format]
+description = "Format code with ruff"
+run = "uv run ruff format ."
+
+[tasks.format-check]
+description = "Check code formatting"
+run = "uv run ruff format . --check"
+
+[tasks.check]
+description = "Run all checks (lint, format, test)"
+depends = ["lint", "format-check", "test"]
