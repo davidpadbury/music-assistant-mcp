@@ -3,6 +3,7 @@
 import pytest
 from mcp.server.fastmcp import FastMCP
 
+from music_assistant_mcp.client import with_reconnect
 from music_assistant_mcp.tools import music, playback, players, queue
 
 
@@ -114,3 +115,59 @@ async def test_format_queue_state_fetches_items_from_api():
     assert "Track One" in result
     assert "Track Two" in result
     assert "item_1" in result
+
+
+@pytest.mark.asyncio
+async def test_with_reconnect_retries_on_connection_error(monkeypatch):
+    """Test that with_reconnect decorator retries after ConnectionResetError."""
+    call_count = 0
+
+    @with_reconnect
+    async def flaky_function():
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise ConnectionResetError("Cannot write to closing transport")
+        return "success"
+
+    # Mock force_reconnect to avoid actual connection
+    async def mock_force_reconnect():
+        pass
+
+    monkeypatch.setattr(
+        "music_assistant_mcp.client.force_reconnect", mock_force_reconnect
+    )
+
+    result = await flaky_function()
+
+    assert result == "success"
+    assert call_count == 2  # First call failed, retry succeeded
+
+
+@pytest.mark.asyncio
+async def test_with_reconnect_passes_through_on_success():
+    """Test that with_reconnect passes through when no error occurs."""
+    call_count = 0
+
+    @with_reconnect
+    async def working_function():
+        nonlocal call_count
+        call_count += 1
+        return "success"
+
+    result = await working_function()
+
+    assert result == "success"
+    assert call_count == 1  # Only called once
+
+
+@pytest.mark.asyncio
+async def test_with_reconnect_propagates_non_connection_errors():
+    """Test that with_reconnect doesn't retry for non-connection errors."""
+
+    @with_reconnect
+    async def error_function():
+        raise ValueError("Not a connection error")
+
+    with pytest.raises(ValueError, match="Not a connection error"):
+        await error_function()

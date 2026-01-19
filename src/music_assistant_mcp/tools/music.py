@@ -7,6 +7,8 @@ from music_assistant_client import MusicAssistantClient
 from music_assistant_models.enums import MediaType
 from pydantic import BaseModel, Field
 
+from ..client import with_reconnect
+
 
 def register_tools(
     mcp: FastMCP, get_client: Callable[[], Awaitable[MusicAssistantClient]]
@@ -34,6 +36,7 @@ def register_tools(
         )
 
     @mcp.tool()
+    @with_reconnect
     async def ma_search(params: SearchInput) -> str:
         """Search for music across all configured providers.
 
@@ -138,6 +141,7 @@ def register_tools(
         )
 
     @mcp.tool()
+    @with_reconnect
     async def ma_browse(params: BrowseInput) -> str:
         """Browse music provider content hierarchically.
 

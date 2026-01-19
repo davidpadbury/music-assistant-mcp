@@ -8,6 +8,8 @@ from music_assistant_client import MusicAssistantClient
 from music_assistant_models.enums import QueueOption
 from pydantic import BaseModel, Field
 
+from ..client import with_reconnect
+
 
 def register_tools(
     mcp: FastMCP, get_client: Callable[[], Awaitable[MusicAssistantClient]]
@@ -29,6 +31,7 @@ def register_tools(
         )
 
     @mcp.tool()
+    @with_reconnect
     async def ma_playback(params: PlaybackInput) -> str:
         """Control playback state - play, pause, stop, skip tracks, or seek.
 
@@ -99,6 +102,7 @@ def register_tools(
         )
 
     @mcp.tool()
+    @with_reconnect
     async def ma_play_media(params: PlayMediaInput) -> str:
         """Play media on a player/queue.
 

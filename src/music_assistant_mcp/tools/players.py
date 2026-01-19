@@ -7,6 +7,8 @@ from mcp.server.fastmcp import FastMCP
 from music_assistant_client import MusicAssistantClient
 from pydantic import BaseModel, Field
 
+from ..client import with_reconnect
+
 
 def register_tools(
     mcp: FastMCP, get_client: Callable[[], Awaitable[MusicAssistantClient]]
@@ -14,6 +16,7 @@ def register_tools(
     """Register player control tools with the MCP server."""
 
     @mcp.tool()
+    @with_reconnect
     async def ma_list_players() -> str:
         """List all available players with their current state.
 
@@ -94,6 +97,7 @@ def register_tools(
         )
 
     @mcp.tool()
+    @with_reconnect
     async def ma_volume(params: VolumeInput) -> str:
         """Control player volume - set level, adjust up/down, or mute/unmute.
 
@@ -153,6 +157,7 @@ def register_tools(
         )
 
     @mcp.tool()
+    @with_reconnect
     async def ma_group(params: GroupInput) -> str:
         """Manage speaker groups - join players together or remove from groups.
 

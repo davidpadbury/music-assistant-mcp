@@ -7,6 +7,8 @@ from mcp.server.fastmcp import FastMCP
 from music_assistant_models.enums import RepeatMode
 from pydantic import BaseModel, Field
 
+from ..client import with_reconnect
+
 if TYPE_CHECKING:
     from music_assistant_client import MusicAssistantClient
 
@@ -102,6 +104,7 @@ def register_tools(
         )
 
     @mcp.tool()
+    @with_reconnect
     async def ma_queue(params: QueueInput) -> str:
         """Get queue state and items, or modify queue settings.
 
@@ -162,6 +165,7 @@ def register_tools(
         )
 
     @mcp.tool()
+    @with_reconnect
     async def ma_queue_item(params: QueueItemInput) -> str:
         """Manage individual items in the queue.
 
@@ -202,6 +206,7 @@ def register_tools(
         target_queue_id: str = Field(description="The queue/player to transfer to")
 
     @mcp.tool()
+    @with_reconnect
     async def ma_transfer_queue(params: TransferQueueInput) -> str:
         """Transfer playback from one player to another.
 

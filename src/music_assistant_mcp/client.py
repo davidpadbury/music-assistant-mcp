@@ -1,8 +1,15 @@
 """Music Assistant client connection management."""
 
+import logging
 import os
+from collections.abc import Awaitable, Callable
+from typing import TypeVar
 
 from music_assistant_client import MusicAssistantClient
+
+logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
 
 
 class MusicAssistantConnection:
@@ -83,3 +90,68 @@ async def get_client() -> MusicAssistantClient:
         await _connection.connect()
 
     return _connection.client
+
+
+async def force_reconnect() -> MusicAssistantClient:
+    """Force a fresh connection to Music Assistant.
+
+    Disconnects any existing connection and establishes a new one.
+    Used when the existing connection is detected to be stale.
+    """
+    global _connection
+
+    if _connection is None:
+        _connection = MusicAssistantConnection()
+    else:
+        # Clean up existing connection
+        try:
+            await _connection.disconnect()
+        except Exception:
+            # Ignore errors during cleanup
+            pass
+        _connection._client = None
+
+    await _connection.connect()
+    return _connection.client
+
+
+# Exceptions that indicate a stale/broken connection
+CONNECTION_ERRORS = (
+    ConnectionResetError,  # "Cannot write to closing transport"
+    ConnectionError,
+    BrokenPipeError,
+    OSError,  # Catches various network-related errors
+)
+
+
+def with_reconnect(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
+    """Decorator that retries a function once after reconnecting on connection errors.
+
+    Use this to wrap MCP tool functions. If the function raises a connection error
+    (e.g., "Cannot write to closing transport"), this will force a reconnection
+    and retry the function once.
+
+    The decorated function should call get_client() to get the client, so that
+    on retry it gets the fresh connection.
+
+    Example:
+        @with_reconnect
+        async def my_tool():
+            client = await get_client()
+            return await client.players.volume_set(...)
+    """
+    import functools
+
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs) -> T:
+        try:
+            return await func(*args, **kwargs)
+        except CONNECTION_ERRORS as e:
+            logger.warning(
+                f"Connection error in {getattr(func, '__name__', repr(func))}, reconnecting: {e}"
+            )
+            await force_reconnect()
+            # Retry once - the function will call get_client() again
+            return await func(*args, **kwargs)
+
+    return wrapper
