@@ -41,6 +41,19 @@ def register_tools(
             if hasattr(player, "volume_muted") and player.volume_muted:
                 status_parts.append("(muted)")
 
+            # Active source (e.g., "TV", "AUX", "Spotify")
+            # Skip if the source is the player's own ID (means Music Assistant is the source)
+            if hasattr(player, "active_source") and player.active_source:
+                if player.active_source != player.player_id:
+                    # Try to look up the friendly name from source_list
+                    source_name = player.active_source
+                    if hasattr(player, "source_list") and player.source_list:
+                        for source in player.source_list:
+                            if source.id == player.active_source:
+                                source_name = source.name
+                                break
+                    status_parts.append(f"Source: {source_name}")
+
             # Group info
             if hasattr(player, "group_childs") and player.group_childs:
                 status_parts.append(
