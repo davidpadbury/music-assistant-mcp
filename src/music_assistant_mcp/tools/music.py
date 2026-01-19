@@ -139,6 +139,17 @@ def register_tools(
                 "Use paths from previous browse results to navigate deeper."
             ),
         )
+        limit: int = Field(
+            default=20,
+            ge=1,
+            le=100,
+            description="Maximum items to return (1-100)",
+        )
+        offset: int = Field(
+            default=0,
+            ge=0,
+            description="Number of items to skip for pagination",
+        )
 
     @mcp.tool()
     @with_reconnect
@@ -156,15 +167,23 @@ def register_tools(
         client = await get_client()
 
         # Browse the path (or root if not specified)
-        items = await client.music.browse(params.path)
+        all_items = await client.music.browse(params.path)
+        total_count = len(all_items)
+
+        # Apply pagination
+        items = all_items[params.offset : params.offset + params.limit]
 
         if params.path:
             lines = [f"# Browsing: {params.path}\n"]
         else:
             lines = ["# Music Providers\n"]
 
-        if not items:
+        if not all_items:
             lines.append("No items found at this path.")
+            return "\n".join(lines)
+
+        if params.offset >= total_count:
+            lines.append(f"Offset {params.offset} exceeds total items ({total_count}).")
             return "\n".join(lines)
 
         # Group items by type for better organization
@@ -228,6 +247,20 @@ def register_tools(
                 uri_str = f" `{item['uri']}`" if item["uri"] else ""
                 lines.append(f"- {type_icon} {item['name']}{uri_str}")
             lines.append("")
+
+        # Pagination info and guidance
+        showing_end = params.offset + len(items)
+        has_more = showing_end < total_count
+
+        if has_more:
+            lines.append(
+                f"\n**Showing {params.offset + 1}-{showing_end} of {total_count} items.** "
+                f"Use `offset={showing_end}` to see more, or use `ma_search` to find specific items."
+            )
+        else:
+            lines.append(
+                f"\n*Showing {params.offset + 1}-{showing_end} of {total_count} items.*"
+            )
 
         lines.append(
             "\n*Use folder paths with ma_browse to navigate. Use media URIs with ma_play_media to play.*"
