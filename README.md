@@ -49,7 +49,8 @@ Add this configuration to:
 | Tool | Purpose |
 |------|---------|
 | `ma_list_players` | List all speakers with volume, state, and group info |
-| `ma_volume` | Set volume level (0-100), adjust up/down, or mute/unmute |
+| `ma_volume` | Set volume level (0-100), adjust up/down, or mute/unmute for a single player |
+| `ma_group_volume` | Set or adjust volume for all players in a speaker group |
 | `ma_group` | Group speakers together or ungroup them |
 
 ### Playback Tools

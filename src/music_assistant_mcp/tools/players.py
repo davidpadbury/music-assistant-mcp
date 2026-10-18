@@ -95,24 +95,20 @@ def register_tools(
             default=None,
             description="Set mute state. True to mute, False to unmute. Omit to use level or adjust instead.",
         )
-        group: bool = Field(
-            default=False,
-            description="Apply volume change to all players in the group. Only works with level and adjust, not mute.",
-        )
 
     @mcp.tool()
     @with_reconnect
     async def ma_volume(params: VolumeInput) -> str:
-        """Control player volume - set level, adjust up/down, or mute/unmute.
+        """Control volume for a single player - set level, adjust up/down, or mute/unmute.
 
         Provide exactly one of: level, adjust, or mute.
+
+        For group volume control (all players in a group), use ma_group_volume instead.
 
         Examples:
         - Set volume to 50%: level=50
         - Turn volume up: adjust="up"
         - Mute the player: mute=True
-        - Set group volume to 15%: level=15, group=True
-        - Turn group volume up: adjust="up", group=True
         """
         client = await get_client()
 
@@ -131,23 +127,6 @@ def register_tools(
         if options_provided > 1:
             return "Error: Provide only one of: level, adjust, or mute"
 
-        # Group volume control
-        if params.group:
-            if params.mute is not None:
-                return "Error: Group mute is not supported. Use mute on individual players."
-
-            if params.level is not None:
-                await client.players.group_volume(params.player_id, params.level)
-                return f"Group volume set to {params.level}% on {params.player_id}"
-
-            if params.adjust == "up":
-                await client.players.group_volume_up(params.player_id)
-                return f"Group volume increased on {params.player_id}"
-            else:
-                await client.players.group_volume_down(params.player_id)
-                return f"Group volume decreased on {params.player_id}"
-
-        # Individual player volume control
         if params.level is not None:
             await client.players.volume_set(params.player_id, params.level)
             return f"Volume set to {params.level}% on {params.player_id}"
@@ -166,6 +145,58 @@ def register_tools(
             return f"Player {params.player_id} {state}"
 
         return "Error: No action specified"
+
+    class GroupVolumeInput(BaseModel):
+        """Input for group volume control."""
+
+        player_id: str = Field(
+            description="Any player in the group (use ma_list_players to find group members)"
+        )
+        level: int | None = Field(
+            default=None,
+            ge=0,
+            le=100,
+            description="Set group volume to this level (0-100). Omit to use adjust instead.",
+        )
+        adjust: Literal["up", "down"] | None = Field(
+            default=None,
+            description="Adjust group volume up or down. Omit to use level instead.",
+        )
+
+    @mcp.tool()
+    @with_reconnect
+    async def ma_group_volume(params: GroupVolumeInput) -> str:
+        """Control volume for all players in a speaker group.
+
+        Adjusts volume for all players that are grouped together. The player_id
+        can be any member of the group - the volume change applies to all members.
+
+        Provide exactly one of: level or adjust.
+
+        Examples:
+        - Set group volume to 30%: player_id="living_room", level=30
+        - Turn group volume up: player_id="kitchen", adjust="up"
+        - Turn group volume down: player_id="bedroom", adjust="down"
+        """
+        client = await get_client()
+
+        # Validate exactly one option provided
+        if params.level is None and params.adjust is None:
+            return "Error: Provide either level (0-100) or adjust ('up'/'down')"
+
+        if params.level is not None and params.adjust is not None:
+            return "Error: Provide only one of: level or adjust"
+
+        if params.level is not None:
+            await client.players.group_volume(params.player_id, params.level)
+            return f"Group volume set to {params.level}% on {params.player_id}"
+
+        if params.adjust == "up":
+            await client.players.group_volume_up(params.player_id)
+            return f"Group volume increased on {params.player_id}"
+        else:
+            await client.players.group_volume_down(params.player_id)
+            return f"Group volume decreased on {params.player_id}"
 
     class GroupInput(BaseModel):
         """Input for speaker grouping."""
