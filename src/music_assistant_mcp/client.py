@@ -106,9 +106,8 @@ async def force_reconnect() -> MusicAssistantClient:
         # Clean up existing connection
         try:
             await _connection.disconnect()
-        except Exception:
-            # Ignore errors during cleanup
-            pass
+        except Exception as exc:  # noqa: BLE001 - best-effort cleanup must never block reconnect
+            logger.debug("Error during disconnect cleanup: %s", exc)
         _connection._client = None
 
     await _connection.connect()

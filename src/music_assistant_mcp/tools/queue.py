@@ -3,7 +3,7 @@
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Literal, Protocol
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 from music_assistant_models.enums import RepeatMode
 from pydantic import BaseModel, Field
 
@@ -53,9 +53,13 @@ async def format_queue_state(player_queues: PlayerQueuesProtocol, queue_id: str)
         item = queue.current_item
         name = getattr(item, "name", "Unknown")
         artist = ""
-        if hasattr(item, "media_item") and item.media_item:
-            if hasattr(item.media_item, "artists") and item.media_item.artists:
-                artist = f" by {item.media_item.artists[0].name}"
+        if (
+            hasattr(item, "media_item")
+            and item.media_item
+            and hasattr(item.media_item, "artists")
+            and item.media_item.artists
+        ):
+            artist = f" by {item.media_item.artists[0].name}"
         lines.append(f"**Now Playing:** {name}{artist}\n")
 
     # Queue items - queue.items is an int (count), fetch actual items via API
@@ -78,7 +82,7 @@ async def format_queue_state(player_queues: PlayerQueuesProtocol, queue_id: str)
 
 
 def register_tools(
-    mcp: FastMCP, get_client: Callable[[], Awaitable["MusicAssistantClient"]]
+    mcp: MCPServer, get_client: Callable[[], Awaitable["MusicAssistantClient"]]
 ):
     """Register queue management tools with the MCP server."""
 

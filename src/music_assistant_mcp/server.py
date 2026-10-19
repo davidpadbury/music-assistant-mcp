@@ -3,13 +3,13 @@
 Provides tools for controlling Music Assistant through the Model Context Protocol.
 """
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from .client import get_client
 from .tools import music, playback, players, queue
 
 # Create the MCP server
-mcp = FastMCP("music-assistant")
+mcp = MCPServer("music-assistant")
 
 # Register tools from each module
 players.register_tools(mcp, get_client)

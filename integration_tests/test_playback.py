@@ -2,6 +2,7 @@
 
 import pytest
 from music_assistant_client import MusicAssistantClient
+from music_assistant_models.errors import MediaNotFoundError
 
 
 class TestPlaybackControl:
@@ -49,7 +50,7 @@ class TestPlayMedia:
         self, client: MusicAssistantClient, player_id: str
     ):
         """Playing an invalid URI raises an appropriate error."""
-        with pytest.raises(Exception):
+        with pytest.raises(MediaNotFoundError):
             await client.player_queues.play_media(
                 queue_id=player_id,
                 media=["invalid://not-a-real-uri"],

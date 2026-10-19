@@ -3,7 +3,7 @@
 from collections.abc import Awaitable, Callable
 from typing import Literal
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 from music_assistant_client import MusicAssistantClient
 from pydantic import BaseModel, Field
 
@@ -11,7 +11,7 @@ from ..client import with_reconnect
 
 
 def register_tools(
-    mcp: FastMCP, get_client: Callable[[], Awaitable[MusicAssistantClient]]
+    mcp: MCPServer, get_client: Callable[[], Awaitable[MusicAssistantClient]]
 ):
     """Register player control tools with the MCP server."""
 
@@ -46,21 +46,24 @@ def register_tools(
 
             # Active source (e.g., "TV", "AUX", "Spotify")
             # Skip if the source is the player's own ID (means Music Assistant is the source)
-            if hasattr(player, "active_source") and player.active_source:
-                if player.active_source != player.player_id:
-                    # Try to look up the friendly name from source_list
-                    source_name = player.active_source
-                    if hasattr(player, "source_list") and player.source_list:
-                        for source in player.source_list:
-                            if source.id == player.active_source:
-                                source_name = source.name
-                                break
-                    status_parts.append(f"Source: {source_name}")
+            if (
+                hasattr(player, "active_source")
+                and player.active_source
+                and player.active_source != player.player_id
+            ):
+                # Try to look up the friendly name from source_list
+                source_name = player.active_source
+                if hasattr(player, "source_list") and player.source_list:
+                    for source in player.source_list:
+                        if source.id == player.active_source:
+                            source_name = source.name
+                            break
+                status_parts.append(f"Source: {source_name}")
 
             # Group info
-            if hasattr(player, "group_childs") and player.group_childs:
+            if hasattr(player, "group_members") and player.group_members:
                 status_parts.append(
-                    f"Group leader with {len(player.group_childs)} members"
+                    f"Group leader with {len(player.group_members)} members"
                 )
             elif hasattr(player, "synced_to") and player.synced_to:
                 status_parts.append(f"Synced to: {player.synced_to}")

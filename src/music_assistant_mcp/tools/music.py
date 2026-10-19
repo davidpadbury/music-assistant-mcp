@@ -2,7 +2,7 @@
 
 from collections.abc import Awaitable, Callable
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 from music_assistant_client import MusicAssistantClient
 from music_assistant_models.enums import MediaType
 from pydantic import BaseModel, Field
@@ -11,7 +11,7 @@ from ..client import with_reconnect
 
 
 def register_tools(
-    mcp: FastMCP, get_client: Callable[[], Awaitable[MusicAssistantClient]]
+    mcp: MCPServer, get_client: Callable[[], Awaitable[MusicAssistantClient]]
 ):
     """Register music library tools with the MCP server."""
 

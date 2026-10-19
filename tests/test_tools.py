@@ -1,7 +1,7 @@
 """Tests for MCP tools registration."""
 
 import pytest
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from music_assistant_mcp.client import with_reconnect
 from music_assistant_mcp.tools import music, playback, players, queue
@@ -14,7 +14,7 @@ async def mock_get_client():
 
 def test_player_tools_register():
     """Test that player tools register correctly."""
-    mcp = FastMCP("test")
+    mcp = MCPServer("test")
     players.register_tools(mcp, mock_get_client)
 
     tool_names = [t.name for t in mcp._tool_manager._tools.values()]
@@ -26,7 +26,7 @@ def test_player_tools_register():
 
 def test_playback_tools_register():
     """Test that playback tools register correctly."""
-    mcp = FastMCP("test")
+    mcp = MCPServer("test")
     playback.register_tools(mcp, mock_get_client)
 
     tool_names = [t.name for t in mcp._tool_manager._tools.values()]
@@ -36,7 +36,7 @@ def test_playback_tools_register():
 
 def test_queue_tools_register():
     """Test that queue tools register correctly."""
-    mcp = FastMCP("test")
+    mcp = MCPServer("test")
     queue.register_tools(mcp, mock_get_client)
 
     tool_names = [t.name for t in mcp._tool_manager._tools.values()]
@@ -47,7 +47,7 @@ def test_queue_tools_register():
 
 def test_music_tools_register():
     """Test that music tools register correctly."""
-    mcp = FastMCP("test")
+    mcp = MCPServer("test")
     music.register_tools(mcp, mock_get_client)
 
     tool_names = [t.name for t in mcp._tool_manager._tools.values()]
@@ -57,7 +57,7 @@ def test_music_tools_register():
 
 def test_all_tools_register():
     """Test that all 11 tools register without conflict."""
-    mcp = FastMCP("test")
+    mcp = MCPServer("test")
     players.register_tools(mcp, mock_get_client)
     playback.register_tools(mcp, mock_get_client)
     queue.register_tools(mcp, mock_get_client)
