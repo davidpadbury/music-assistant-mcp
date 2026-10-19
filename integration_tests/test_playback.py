@@ -13,8 +13,17 @@ class TestPlaybackControl:
         await client.player_queues.pause(player_id)
         # No assertion needed - if it doesn't raise, it worked
 
+    async def _queue_is_empty(
+        self, client: MusicAssistantClient, player_id: str
+    ) -> bool:
+        """Check whether the player's queue has any items."""
+        queue = next((q for q in client.player_queues if q.queue_id == player_id), None)
+        return queue is None or not queue.items
+
     async def test_play(self, client: MusicAssistantClient, player_id: str):
         """Play command executes without error."""
+        if await self._queue_is_empty(client, player_id):
+            pytest.skip("Queue is empty - cannot verify play")
         await client.player_queues.play(player_id)
 
     async def test_stop(self, client: MusicAssistantClient, player_id: str):
@@ -23,6 +32,8 @@ class TestPlaybackControl:
 
     async def test_toggle(self, client: MusicAssistantClient, player_id: str):
         """Toggle play/pause executes without error."""
+        if await self._queue_is_empty(client, player_id):
+            pytest.skip("Queue is empty - cannot verify toggle")
         await client.player_queues.play_pause(player_id)
 
 

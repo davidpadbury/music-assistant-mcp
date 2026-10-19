@@ -1,6 +1,5 @@
 """Integration tests for player tools."""
 
-import pytest
 from music_assistant_client import MusicAssistantClient
 
 from .conftest import poll_until
@@ -139,9 +138,6 @@ class TestVolumeControl:
 class TestPlayerGrouping:
     """Tests for ma_group functionality."""
 
-    @pytest.mark.xfail(
-        reason="Ungroup state doesn't propagate reliably through Music Assistant"
-    )
     async def test_group_and_ungroup(
         self, client: MusicAssistantClient, two_player_ids: tuple[str, str]
     ):

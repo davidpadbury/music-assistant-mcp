@@ -65,19 +65,19 @@ async def client(ma_url: str, ma_token: str | None) -> MusicAssistantClient:
 
 @pytest.fixture
 async def player_id(client: MusicAssistantClient) -> str:
-    """Get the first available player ID, or skip if none available."""
-    players = list(client.players)
+    """Get the first available player with a reported volume, or skip if none."""
+    players = [p for p in client.players if p.available and p.volume_level is not None]
     if not players:
-        pytest.skip("No players available")
+        pytest.skip("No available player with a reported volume level")
     return players[0].player_id
 
 
 @pytest.fixture
 async def two_player_ids(client: MusicAssistantClient) -> tuple[str, str]:
     """Get two player IDs for grouping tests, or skip if fewer than 2 available."""
-    players = list(client.players)
+    players = [p for p in client.players if p.available]
     if len(players) < 2:
-        pytest.skip("At least 2 players required for grouping tests")
+        pytest.skip("At least 2 available players required for grouping tests")
     return players[0].player_id, players[1].player_id
 
 
