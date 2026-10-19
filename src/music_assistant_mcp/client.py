@@ -1,19 +1,34 @@
 """Music Assistant client connection management."""
 
+import asyncio
 import logging
 import os
 from collections.abc import Awaitable, Callable
 from typing import TypeVar
 
 from music_assistant_client import MusicAssistantClient
+from music_assistant_client.exceptions import (
+    CannotConnect,
+    ConnectionClosed,
+    InvalidState,
+)
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
+# How long to wait for the initial state fetch after connecting.
+CONNECT_TIMEOUT = 10.0
+
 
 class MusicAssistantConnection:
-    """Manages connection to Music Assistant server."""
+    """Manages a single connection to Music Assistant, kept alive by a listener task.
+
+    The underlying MusicAssistantClient runs ``start_listening`` in a background
+    task, which owns the websocket read loop and continuously applies incoming
+    events to the cached state (players, queues, volumes). Every command is sent
+    through that listener, so parallel tool calls never contend for the socket.
+    """
 
     def __init__(
         self,
@@ -30,25 +45,17 @@ class MusicAssistantConnection:
         self.url: str = resolved_url
         self.token = token or os.environ.get("MUSIC_ASSISTANT_TOKEN")
         self._client: MusicAssistantClient | None = None
+        self._listener: asyncio.Task | None = None
 
-    async def connect(self) -> MusicAssistantClient:
-        """Establish connection to Music Assistant server."""
-        if self._client is not None:
-            return self._client
-
-        # Token is passed to constructor (required for schema 28+)
-        self._client = MusicAssistantClient(
-            server_url=self.url,
-            aiohttp_session=None,
-            token=self.token,
+    @property
+    def is_connected(self) -> bool:
+        """Whether the listener is still running and the websocket is open."""
+        return (
+            self._client is not None
+            and self._listener is not None
+            and not self._listener.done()
+            and self._client.connection.connected
         )
-        await self._client.connect()
-
-        # Fetch initial state for players and queues
-        await self._client.players.fetch_state()
-        await self._client.player_queues.fetch_state()
-
-        return self._client
 
     @property
     def client(self) -> MusicAssistantClient:
@@ -59,15 +66,93 @@ class MusicAssistantConnection:
             )
         return self._client
 
+    async def connect(self) -> MusicAssistantClient:
+        """Establish a connection, or return the existing live one.
+
+        Always builds a fresh MusicAssistantClient: once ``start_listening``
+        exits it disconnects itself and cannot be reused.
+        """
+        if self.is_connected and self._client is not None:
+            return self._client
+
+        if self._client is not None:
+            # Stale connection - tear it down before building a fresh one
+            await self._cleanup()
+
+        return await self._connect_fresh()
+
+    async def reconnect(self) -> MusicAssistantClient:
+        """Force a fresh connection: tear down the current one and reconnect."""
+        await self._cleanup()
+        return await self._connect_fresh()
+
     async def disconnect(self) -> None:
         """Disconnect from Music Assistant server."""
-        if self._client:
-            await self._client.disconnect()
-            self._client = None
+        await self._cleanup()
+
+    async def _connect_fresh(self) -> MusicAssistantClient:
+        client = MusicAssistantClient(
+            server_url=self.url,
+            aiohttp_session=None,
+            token=self.token,
+        )
+        init_ready = asyncio.Event()
+        listener = asyncio.create_task(client.start_listening(init_ready))
+
+        try:
+            await asyncio.wait_for(init_ready.wait(), timeout=CONNECT_TIMEOUT)
+        except TimeoutError:
+            listener.cancel()
+            await self._drain(listener)
+            await self._quiet_disconnect(client)
+            raise CannotConnect(
+                TimeoutError(f"Timed out connecting to {self.url}")
+            ) from None
+
+        if listener.done():
+            # Listener exited before initialization finished
+            await self._quiet_disconnect(client)
+            exc = listener.exception()
+            if exc is not None:
+                raise exc
+            raise CannotConnect(
+                ConnectionError(f"Connection to {self.url} closed during startup")
+            ) from None
+
+        self._client = client
+        self._listener = listener
+        return client
+
+    async def _cleanup(self) -> None:
+        """Cancel the listener task and disconnect the client, ignoring errors."""
+        if self._listener is not None and not self._listener.done():
+            self._listener.cancel()
+            await self._drain(self._listener)
+        self._listener = None
+        if self._client is not None:
+            await self._quiet_disconnect(self._client)
+        self._client = None
+
+    @staticmethod
+    async def _drain(task: asyncio.Task) -> None:
+        """Await a task, swallowing its result, errors, and cancellation."""
+        try:
+            await task
+        except (asyncio.CancelledError, Exception):  # noqa: BLE001, S110 - draining a task
+            pass
+
+    @staticmethod
+    async def _quiet_disconnect(client: MusicAssistantClient) -> None:
+        try:
+            await client.disconnect()
+        except Exception as exc:  # noqa: BLE001 - best-effort cleanup
+            logger.debug("Error during disconnect cleanup: %s", exc)
 
 
 # Global connection instance (lazy initialization)
 _connection: MusicAssistantConnection | None = None
+# Serializes connection creation/reconnect so concurrent callers share one attempt
+_connection_lock = asyncio.Lock()
 
 
 async def get_client() -> MusicAssistantClient:
@@ -79,17 +164,15 @@ async def get_client() -> MusicAssistantClient:
     """
     global _connection
 
-    if _connection is None:
-        _connection = MusicAssistantConnection()
+    async with _connection_lock:
+        if _connection is None:
+            _connection = MusicAssistantConnection()
 
-    # Check if existing connection is still alive
-    if _connection._client is None or not _connection._client.connection.connected:
-        if _connection._client is not None:
-            # Clean up stale connection
-            await _connection.disconnect()
-        await _connection.connect()
+        # Check if existing connection is still alive, reconnect if not
+        if not _connection.is_connected:
+            await _connection.connect()
 
-    return _connection.client
+        return _connection.client
 
 
 async def force_reconnect() -> MusicAssistantClient:
@@ -100,18 +183,10 @@ async def force_reconnect() -> MusicAssistantClient:
     """
     global _connection
 
-    if _connection is None:
-        _connection = MusicAssistantConnection()
-    else:
-        # Clean up existing connection
-        try:
-            await _connection.disconnect()
-        except Exception as exc:  # noqa: BLE001 - best-effort cleanup must never block reconnect
-            logger.debug("Error during disconnect cleanup: %s", exc)
-        _connection._client = None
-
-    await _connection.connect()
-    return _connection.client
+    async with _connection_lock:
+        if _connection is None:
+            _connection = MusicAssistantConnection()
+        return await _connection.reconnect()
 
 
 # Exceptions that indicate a stale/broken connection
@@ -120,6 +195,9 @@ CONNECTION_ERRORS = (
     ConnectionError,
     BrokenPipeError,
     OSError,  # Catches various network-related errors
+    CannotConnect,  # "Connector is closed."
+    ConnectionClosed,  # websocket dropped
+    InvalidState,  # "Not connected"
 )
 
 
