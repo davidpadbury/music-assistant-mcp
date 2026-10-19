@@ -22,6 +22,8 @@ def test_player_tools_register():
     assert "ma_volume" in tool_names
     assert "ma_group_volume" in tool_names
     assert "ma_group" in tool_names
+    assert "ma_announce" in tool_names
+    assert "ma_select_source" in tool_names
 
 
 def test_playback_tools_register():
@@ -56,7 +58,7 @@ def test_music_tools_register():
 
 
 def test_all_tools_register():
-    """Test that all 11 tools register without conflict."""
+    """Test that all 13 tools register without conflict."""
     mcp = MCPServer("test")
     players.register_tools(mcp, mock_get_client)
     playback.register_tools(mcp, mock_get_client)
@@ -64,13 +66,15 @@ def test_all_tools_register():
     music.register_tools(mcp, mock_get_client)
 
     tool_names = [t.name for t in mcp._tool_manager._tools.values()]
-    assert len(tool_names) == 11
+    assert len(tool_names) == 13
 
     expected_tools = [
         "ma_list_players",
         "ma_volume",
         "ma_group_volume",
         "ma_group",
+        "ma_announce",
+        "ma_select_source",
         "ma_playback",
         "ma_play_media",
         "ma_queue",

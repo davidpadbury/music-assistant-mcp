@@ -52,6 +52,8 @@ Add this configuration to:
 | `ma_volume` | Set volume level (0-100), adjust up/down, or mute/unmute for a single player |
 | `ma_group_volume` | Set or adjust volume for all players in a speaker group |
 | `ma_group` | Group speakers together or ungroup them |
+| `ma_announce` | Play an announcement (spoken message or audio file) on a player |
+| `ma_select_source` | Switch a player's input source (e.g. TV, AUX, Spotify) |
 
 ### Playback Tools
 

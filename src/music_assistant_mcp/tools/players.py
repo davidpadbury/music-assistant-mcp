@@ -69,8 +69,8 @@ def register_tools(
                 status_parts.append(f"Synced to: {player.synced_to}")
 
             # State
-            if hasattr(player, "state"):
-                status_parts.append(f"State: {player.state}")
+            if hasattr(player, "playback_state"):
+                status_parts.append(f"State: {player.playback_state.value}")
 
             status = " | ".join(status_parts) if status_parts else "No status"
             lines.append(f"- **{player.name}** (`{player.player_id}`)")
@@ -251,3 +251,91 @@ def register_tools(
 
             player_list = ", ".join(params.player_ids)
             return f"Players [{player_list}] removed from their groups"
+
+    class AnnounceInput(BaseModel):
+        """Input for announcements."""
+
+        player_id: str = Field(
+            description="The player ID to announce on (use ma_list_players to find IDs)"
+        )
+        message: str | None = Field(
+            default=None,
+            description="Text to speak on the player (TTS). Omit to use url instead.",
+        )
+        url: str | None = Field(
+            default=None,
+            description="Audio file URL to play as the announcement. Omit to use message instead.",
+        )
+        volume_level: int | None = Field(
+            default=None,
+            ge=0,
+            le=100,
+            description="Volume for the announcement (0-100). Defaults to current volume.",
+        )
+        pre_announce: bool | None = Field(
+            default=None,
+            description="Play a pre-announcement sound before the announcement.",
+        )
+        tts_engine: str | None = Field(
+            default=None,
+            description="TTS engine to use for the message. Defaults to the server default.",
+        )
+
+    @mcp.tool()
+    @with_reconnect
+    async def ma_announce(params: AnnounceInput) -> str:
+        """Play an announcement (spoken message or audio file) on a player.
+
+        Provide exactly one of: message (text to speak) or url (audio file).
+
+        Examples:
+        - Speak a message: player_id="kitchen", message="Dinner is ready"
+        - Play an audio file: player_id="kitchen", url="https://example.com/alert.mp3"
+        - Quiet announcement: player_id="bedroom", message="Time to wake up", volume_level=30
+        """
+        if (params.message is None) == (params.url is None):
+            return (
+                "Error: Provide exactly one of: message (TTS text) or url (audio file)"
+            )
+
+        client = await get_client()
+        await client.players.play_announcement(
+            player_id=params.player_id,
+            url=params.url,
+            message=params.message,
+            volume_level=params.volume_level,
+            pre_announce=params.pre_announce,
+            tts_engine=params.tts_engine,
+        )
+        what = f"message: {params.message}" if params.message else f"url: {params.url}"
+        return f"Announcement played on {params.player_id} ({what})"
+
+    class SelectSourceInput(BaseModel):
+        """Input for source selection."""
+
+        player_id: str = Field(
+            description="The player ID to switch source on (use ma_list_players to find IDs)"
+        )
+        source: str = Field(
+            description=(
+                "The source ID to activate (from the 'Source:' shown by ma_list_players "
+                "or the player's source list)"
+            )
+        )
+
+    @mcp.tool()
+    @with_reconnect
+    async def ma_select_source(params: SelectSourceInput) -> str:
+        """Select an input source on a player.
+
+        Switches the player's active input, e.g. from Music Assistant playback to
+        'TV', 'AUX', 'Spotify' or a sync group. Use ma_list_players to see the
+        current source; players expose their available sources.
+
+        Examples:
+        - Switch TV to its HDMI input: player_id="living_room_tv", source="HDMI 1"
+        - Return a Sonos to Music Assistant playback: player_id="kitchen", source="kitchen"
+        """
+        client = await get_client()
+        await client.players.select_source(params.player_id, params.source)
+        return f"Source set to {params.source} on {params.player_id}"
