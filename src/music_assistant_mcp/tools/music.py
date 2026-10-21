@@ -1,13 +1,195 @@
 """Music library tools for Music Assistant MCP server."""
 
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 from mcp.server.mcpserver import MCPServer
+from mcp.types import CallToolResult, TextContent
 from music_assistant_client import MusicAssistantClient
 from music_assistant_models.enums import MediaType
 from pydantic import BaseModel, Field
 
 from ..client import with_reconnect
+
+
+def _media_brief(item, media_type: str) -> dict[str, Any]:
+    """Extract machine-readable fields from a media item (single source of truth)."""
+    brief: dict[str, Any] = {
+        "name": getattr(item, "name", None),
+        "uri": getattr(item, "uri", None),
+        "media_type": media_type,
+    }
+    artists = getattr(item, "artists", None) or []
+    if artists:
+        brief["artists"] = [a.name for a in artists if getattr(a, "name", None)]
+    if media_type == "track":
+        album = getattr(item, "album", None)
+        if album is not None:
+            brief["album"] = getattr(album, "name", None)
+    return brief
+
+
+def _search_payload(query: str, results, limit: int) -> dict[str, Any]:
+    """Build the structured search payload."""
+    media_types = {
+        "artists": "artist",
+        "albums": "album",
+        "tracks": "track",
+        "playlists": "playlist",
+        "radio": "radio",
+    }
+    payload: dict[str, Any] = {"query": query}
+    for key, media_type in media_types.items():
+        items = getattr(results, key, None) or []
+        payload[key] = [_media_brief(item, media_type) for item in items[:limit]]
+    return payload
+
+
+def _format_search(payload: dict[str, Any]) -> str:
+    """Render the search payload as human-readable text."""
+    lines = [f"# Search Results for '{payload['query']}'\n"]
+    has_results = False
+
+    for key, heading in [
+        ("artists", "Artists"),
+        ("albums", "Albums"),
+        ("tracks", "Tracks"),
+        ("playlists", "Playlists"),
+        ("radio", "Radio Stations"),
+    ]:
+        items = payload.get(key) or []
+        if not items:
+            continue
+        has_results = True
+        lines.append(f"## {heading}")
+        for item in items:
+            extra = ""
+            if item.get("media_type") == "track":
+                if item.get("artists"):
+                    extra = f" by {item['artists'][0]}"
+                if item.get("album"):
+                    extra += f" ({item['album']})"
+            elif item.get("media_type") == "album" and item.get("artists"):
+                extra = f" by {item['artists'][0]}"
+            uri = item.get("uri")
+            uri_str = f" `{uri}`" if uri else ""
+            lines.append(f"- {item['name']}{extra}{uri_str}")
+        lines.append("")
+
+    if not has_results:
+        lines.append("No results found.")
+
+    lines.append("\n*Use the URI with ma_play_media to play an item.*")
+    return "\n".join(lines)
+
+
+def _get_browse_path(uri: str | None) -> str | None:
+    """Convert URI to browse path by removing 'folder/' segment.
+
+    The Music Assistant API returns URIs like 'provider://folder/albums'
+    but browse() expects paths like 'provider://albums'.
+    """
+    if not uri:
+        return None
+    # Transform: provider://folder/subpath -> provider://subpath
+    if "://folder/" in uri:
+        return uri.replace("://folder/", "://")
+    return uri
+
+
+def _browse_payload(
+    path: str | None, all_items, offset: int, limit: int
+) -> dict[str, Any]:
+    """Build the structured browse payload from raw browse items."""
+    items = all_items[offset : offset + limit]
+    folders = []
+    media = []
+    for item in items:
+        name = getattr(item, "name", "Unknown")
+        uri = getattr(item, "uri", None)
+        item_type = getattr(item, "media_type", None)
+
+        is_folder = (hasattr(item, "is_folder") and item.is_folder) or item_type in [
+            "library",
+            "folder",
+            "provider",
+        ]
+
+        if is_folder:
+            browse_path = _get_browse_path(uri)
+            folders.append({"name": name, "path": browse_path, "type": item_type})
+        else:
+            media.append({"name": name, "uri": uri, "type": item_type})
+
+    return {
+        "path": path,
+        "total": len(all_items),
+        "offset": offset,
+        "limit": limit,
+        "folders": folders,
+        "media": media,
+    }
+
+
+def _format_browse(payload: dict[str, Any]) -> str:
+    """Render the browse payload as human-readable text."""
+    path = payload["path"]
+    total = payload["total"]
+    offset = payload["offset"]
+    folders = payload["folders"]
+    media = payload["media"]
+
+    if path:
+        lines = [f"# Browsing: {path}\n"]
+    else:
+        lines = ["# Music Providers\n"]
+
+    if total == 0:
+        lines.append("No items found at this path.")
+        return "\n".join(lines)
+
+    if offset >= total:
+        lines.append(f"Offset {offset} exceeds total items ({total}).")
+        return "\n".join(lines)
+
+    if folders:
+        lines.append("## Folders")
+        for item in folders:
+            path_str = f" → `{item['path']}`" if item["path"] else ""
+            lines.append(f"- 📁 {item['name']}{path_str}")
+        lines.append("")
+
+    if media:
+        lines.append("## Media")
+        type_icon = {
+            "artist": "👤",
+            "album": "💿",
+            "track": "🎵",
+            "playlist": "📋",
+            "radio": "📻",
+        }
+        for item in media:
+            uri_str = f" `{item['uri']}`" if item["uri"] else ""
+            lines.append(
+                f"- {type_icon.get(str(item['type']), '•')} {item['name']}{uri_str}"
+            )
+        lines.append("")
+
+    showing_end = offset + len(folders) + len(media)
+    has_more = showing_end < total
+
+    if has_more:
+        lines.append(
+            f"\n**Showing {offset + 1}-{showing_end} of {total} items.** "
+            f"Use `offset={showing_end}` to see more, or use `ma_search` to find specific items."
+        )
+    else:
+        lines.append(f"\n*Showing {offset + 1}-{showing_end} of {total} items.*")
+
+    lines.append(
+        "\n*Use folder paths with ma_browse to navigate. Use media URIs with ma_play_media to play.*"
+    )
+    return "\n".join(lines)
 
 
 def register_tools(
@@ -37,7 +219,7 @@ def register_tools(
 
     @mcp.tool()
     @with_reconnect
-    async def ma_search(params: SearchInput) -> str:
+    async def ma_search(params: SearchInput) -> CallToolResult:
         """Search for music across all configured providers.
 
         Returns matching artists, albums, tracks, playlists, and radio stations.
@@ -63,71 +245,11 @@ def register_tools(
             limit=params.limit,
         )
 
-        lines = [f"# Search Results for '{params.query}'\n"]
-
-        # Helper to format items
-        def format_item(item, media_type: str) -> str:
-            name = getattr(item, "name", "Unknown")
-            uri = getattr(item, "uri", None)
-
-            extra = ""
-            if media_type == "track":
-                if hasattr(item, "artists") and item.artists:
-                    artist = item.artists[0].name if item.artists else ""
-                    extra = f" by {artist}"
-                if hasattr(item, "album") and item.album:
-                    extra += f" ({item.album.name})"
-            elif media_type == "album":
-                if hasattr(item, "artists") and item.artists:
-                    artist = item.artists[0].name if item.artists else ""
-                    extra = f" by {artist}"
-
-            uri_str = f" `{uri}`" if uri else ""
-            return f"- {name}{extra}{uri_str}"
-
-        # Process each media type in results
-        has_results = False
-
-        if hasattr(results, "artists") and results.artists:
-            has_results = True
-            lines.append("## Artists")
-            for item in results.artists[: params.limit]:
-                lines.append(format_item(item, "artist"))
-            lines.append("")
-
-        if hasattr(results, "albums") and results.albums:
-            has_results = True
-            lines.append("## Albums")
-            for item in results.albums[: params.limit]:
-                lines.append(format_item(item, "album"))
-            lines.append("")
-
-        if hasattr(results, "tracks") and results.tracks:
-            has_results = True
-            lines.append("## Tracks")
-            for item in results.tracks[: params.limit]:
-                lines.append(format_item(item, "track"))
-            lines.append("")
-
-        if hasattr(results, "playlists") and results.playlists:
-            has_results = True
-            lines.append("## Playlists")
-            for item in results.playlists[: params.limit]:
-                lines.append(format_item(item, "playlist"))
-            lines.append("")
-
-        if hasattr(results, "radio") and results.radio:
-            has_results = True
-            lines.append("## Radio Stations")
-            for item in results.radio[: params.limit]:
-                lines.append(format_item(item, "radio"))
-            lines.append("")
-
-        if not has_results:
-            lines.append("No results found.")
-
-        lines.append("\n*Use the URI with ma_play_media to play an item.*")
-        return "\n".join(lines)
+        payload = _search_payload(params.query, results, params.limit)
+        return CallToolResult(
+            content=[TextContent(type="text", text=_format_search(payload))],
+            structured_content=payload,
+        )
 
     class BrowseInput(BaseModel):
         """Input for browsing music."""
@@ -153,7 +275,7 @@ def register_tools(
 
     @mcp.tool()
     @with_reconnect
-    async def ma_browse(params: BrowseInput) -> str:
+    async def ma_browse(params: BrowseInput) -> CallToolResult:
         """Browse music provider content hierarchically.
 
         Start with no path to see available providers, then use returned paths
@@ -168,101 +290,9 @@ def register_tools(
 
         # Browse the path (or root if not specified)
         all_items = await client.music.browse(params.path)
-        total_count = len(all_items)
 
-        # Apply pagination
-        items = all_items[params.offset : params.offset + params.limit]
-
-        if params.path:
-            lines = [f"# Browsing: {params.path}\n"]
-        else:
-            lines = ["# Music Providers\n"]
-
-        if not all_items:
-            lines.append("No items found at this path.")
-            return "\n".join(lines)
-
-        if params.offset >= total_count:
-            lines.append(f"Offset {params.offset} exceeds total items ({total_count}).")
-            return "\n".join(lines)
-
-        # Group items by type for better organization
-        folders = []
-        media = []
-
-        def get_browse_path(uri: str | None) -> str | None:
-            """Convert URI to browse path by removing 'folder/' segment.
-
-            The Music Assistant API returns URIs like 'provider://folder/albums'
-            but browse() expects paths like 'provider://albums'.
-            """
-            if not uri:
-                return None
-            # Transform: provider://folder/subpath -> provider://subpath
-            if "://folder/" in uri:
-                return uri.replace("://folder/", "://")
-            return uri
-
-        for item in items:
-            name = getattr(item, "name", "Unknown")
-            uri = getattr(item, "uri", None)
-            item_type = getattr(item, "media_type", None)
-
-            # Check if this is a navigable folder/container
-            is_folder = (
-                hasattr(item, "is_folder") and item.is_folder
-            ) or item_type in [
-                "library",
-                "folder",
-                "provider",
-            ]
-
-            if is_folder:
-                # Folders need path transformed for browse navigation
-                browse_path = get_browse_path(uri)
-                folders.append({"name": name, "path": browse_path, "type": item_type})
-            else:
-                # Media items use 'uri' for playback
-                media.append({"name": name, "uri": uri, "type": item_type})
-
-        # Display folders first
-        if folders:
-            lines.append("## Folders")
-            for item in folders:
-                path_str = f" → `{item['path']}`" if item["path"] else ""
-                lines.append(f"- 📁 {item['name']}{path_str}")
-            lines.append("")
-
-        # Then media items
-        if media:
-            lines.append("## Media")
-            for item in media:
-                type_icon = {
-                    "artist": "👤",
-                    "album": "💿",
-                    "track": "🎵",
-                    "playlist": "📋",
-                    "radio": "📻",
-                }.get(str(item["type"]), "•")
-                uri_str = f" `{item['uri']}`" if item["uri"] else ""
-                lines.append(f"- {type_icon} {item['name']}{uri_str}")
-            lines.append("")
-
-        # Pagination info and guidance
-        showing_end = params.offset + len(items)
-        has_more = showing_end < total_count
-
-        if has_more:
-            lines.append(
-                f"\n**Showing {params.offset + 1}-{showing_end} of {total_count} items.** "
-                f"Use `offset={showing_end}` to see more, or use `ma_search` to find specific items."
-            )
-        else:
-            lines.append(
-                f"\n*Showing {params.offset + 1}-{showing_end} of {total_count} items.*"
-            )
-
-        lines.append(
-            "\n*Use folder paths with ma_browse to navigate. Use media URIs with ma_play_media to play.*"
+        payload = _browse_payload(params.path, all_items, params.offset, params.limit)
+        return CallToolResult(
+            content=[TextContent(type="text", text=_format_browse(payload))],
+            structured_content=payload,
         )
-        return "\n".join(lines)

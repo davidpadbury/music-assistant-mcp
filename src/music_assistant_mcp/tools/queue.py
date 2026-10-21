@@ -1,9 +1,10 @@
 """Queue management tools for Music Assistant MCP server."""
 
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from mcp.server.mcpserver import MCPServer
+from mcp.types import CallToolResult, TextContent
 from music_assistant_models.enums import RepeatMode
 from pydantic import BaseModel, Field
 
@@ -22,59 +23,136 @@ class PlayerQueuesProtocol(Protocol):
     ): ...
 
 
-async def format_queue_state(player_queues: PlayerQueuesProtocol, queue_id: str) -> str:
-    """Format queue state for display.
+def _queue_settings(queue) -> dict[str, Any]:
+    """Machine-readable queue settings."""
+    return {
+        "shuffle": getattr(queue, "shuffle_enabled", None),
+        "repeat": getattr(queue, "repeat_mode", None),
+        "autoplay": getattr(queue, "autoplay_enabled", None),
+        "smart_shuffle": getattr(queue, "smart_shuffle_active", None),
+        "smart_fades": getattr(queue, "smart_fades_active", None),
+        "crossfade": getattr(queue, "crossfade_enabled", None),
+    }
 
-    This is the core logic extracted for testability.
-    """
-    # Find the queue in the client's queue list
-    queue = None
-    for q in player_queues:
-        if q.queue_id == queue_id:
-            queue = q
-            break
 
+def _queue_item_brief(item, index: int) -> dict[str, Any]:
+    """Extract machine-readable fields from a queue item."""
+    return {
+        "index": index,
+        "queue_item_id": getattr(item, "queue_item_id", None),
+        "name": getattr(item, "name", None),
+        "uri": getattr(item, "uri", None),
+        "duration": getattr(item, "duration", None),
+    }
+
+
+async def build_queue_payload(
+    player_queues: PlayerQueuesProtocol,
+    queue_id: str,
+    offset: int = 0,
+    limit: int = 20,
+    player_state: str | None = None,
+) -> dict[str, Any] | None:
+    """Build the machine-readable queue payload. None when the queue is unknown."""
+    queue = next((q for q in player_queues if q.queue_id == queue_id), None)
     if queue is None:
-        return f"Queue not found: {queue_id}. Use ma_list_players to find valid IDs."
+        return None
 
+    items = []
+    if queue.items > 0:
+        items = list(
+            await player_queues.get_queue_items(queue_id, limit=limit, offset=offset)
+        )
+
+    item_briefs = [
+        _queue_item_brief(item, offset + idx) for idx, item in enumerate(items)
+    ]
+
+    now_playing = None
+    current = getattr(queue, "current_item", None)
+    if current is not None:
+        current_id = getattr(current, "queue_item_id", None)
+        now_index = next(
+            (b["index"] for b in item_briefs if b["queue_item_id"] == current_id),
+            None,
+        )
+        media_item = getattr(current, "media_item", None)
+        artists = (
+            [
+                a.name
+                for a in (getattr(media_item, "artists", None) or [])
+                if getattr(a, "name", None)
+            ]
+            if media_item is not None
+            else []
+        )
+        now_playing = {
+            "queue_item_id": current_id,
+            "name": getattr(current, "name", None),
+            "artists": artists,
+        }
+        if now_index is not None:
+            now_playing["index"] = now_index
+
+    return {
+        "queue_id": queue_id,
+        "total_items": queue.items,
+        "offset": offset,
+        "limit": limit,
+        "has_more": offset + len(item_briefs) < queue.items,
+        "state": player_state,
+        "is_playing": player_state == "playing",
+        "settings": _queue_settings(queue),
+        "now_playing": now_playing,
+        "items": item_briefs,
+    }
+
+
+def format_queue_state(payload: dict[str, Any] | None) -> str:
+    """Render the queue payload as human-readable text."""
+    if payload is None:
+        return "Queue not found. Use ma_list_players to find valid IDs."
+
+    queue_id = payload["queue_id"]
     lines = [f"# Queue: {queue_id}\n"]
 
-    # Queue settings
+    state = payload.get("state")
+    if state:
+        lines.append(f"**State:** {state}\n")
+
     settings = []
-    if hasattr(queue, "shuffle_enabled"):
-        settings.append(f"Shuffle: {'on' if queue.shuffle_enabled else 'off'}")
-    if hasattr(queue, "repeat_mode"):
-        settings.append(f"Repeat: {queue.repeat_mode}")
+    s = payload["settings"]
+    if s.get("shuffle") is not None:
+        settings.append(f"Shuffle: {'on' if s['shuffle'] else 'off'}")
+    if s.get("repeat") is not None:
+        settings.append(f"Repeat: {s['repeat']}")
     if settings:
         lines.append(f"**Settings:** {' | '.join(settings)}\n")
 
-    # Current track
-    if hasattr(queue, "current_item") and queue.current_item:
-        item = queue.current_item
-        name = getattr(item, "name", "Unknown")
-        artist = ""
-        if (
-            hasattr(item, "media_item")
-            and item.media_item
-            and hasattr(item.media_item, "artists")
-            and item.media_item.artists
-        ):
-            artist = f" by {item.media_item.artists[0].name}"
-        lines.append(f"**Now Playing:** {name}{artist}\n")
+    now_playing = payload.get("now_playing")
+    if now_playing:
+        name = now_playing.get("name")
+        artists = now_playing.get("artists") or []
+        artist = f" by {artists[0]}" if artists else ""
+        idx = now_playing.get("index")
+        idx_str = f" (queue index {idx})" if idx is not None else ""
+        lines.append(f"**Now Playing:** {name}{artist}{idx_str}\n")
 
-    # Queue items - queue.items is an int (count), fetch actual items via API
-    if queue.items > 0:
-        queue_items = await player_queues.get_queue_items(queue_id, limit=20)
-        if queue_items:
-            lines.append("**Queue:**")
-            for i, item in enumerate(queue_items, 1):
-                name = getattr(item, "name", "Unknown")
-                item_id = getattr(item, "queue_item_id", "unknown")
-                lines.append(f"{i}. {name} (`{item_id}`)")
-            if queue.items > 20:
-                lines.append(f"... and {queue.items - 20} more items")
-        else:
-            lines.append("Queue is empty")
+    items = payload["items"]
+    total = payload["total_items"]
+    if items:
+        lines.append("**Queue:**")
+        for item in items:
+            lines.append(
+                f"{item['index'] + 1}. {item['name']} (`{item['queue_item_id']}`)"
+            )
+        if payload["has_more"]:
+            remaining = total - payload["offset"] - len(items)
+            lines.append(f"... and {remaining} more items")
+    elif total > 0:
+        lines.append(
+            f"No items in this range (offset {payload['offset']}, limit {payload['limit']})."
+        )
     else:
         lines.append("Queue is empty")
 
@@ -106,10 +184,21 @@ def register_tools(
             default=False,
             description="Clear all items from the queue",
         )
+        offset: int = Field(
+            default=0,
+            ge=0,
+            description="Number of queue items to skip (for pagination)",
+        )
+        limit: int = Field(
+            default=20,
+            ge=1,
+            le=100,
+            description="Maximum queue items to return (1-100)",
+        )
 
     @mcp.tool()
     @with_reconnect
-    async def ma_queue(params: QueueInput) -> str:
+    async def ma_queue(params: QueueInput) -> CallToolResult:
         """Get queue state and items, or modify queue settings.
 
         Use this to:
@@ -141,15 +230,38 @@ def register_tools(
 
         # Get queue state
         if params.get_items and not params.clear:
-            output = await format_queue_state(queues, params.queue_id)
+            player_state = None
+            for player in client.players:
+                if player.player_id == params.queue_id:
+                    ps = getattr(player, "playback_state", None)
+                    player_state = ps.value if ps is not None else None
+                    break
+
+            payload = await build_queue_payload(
+                queues, params.queue_id, params.offset, params.limit, player_state
+            )
+            output = format_queue_state(payload)
             if results:
-                return "**Changes applied:** " + ", ".join(results) + "\n\n" + output
-            return output
+                output = "**Changes applied:** " + ", ".join(results) + "\n\n" + output
+            return CallToolResult(
+                content=[TextContent(type="text", text=output)],
+                structured_content={"queue": payload},
+            )
 
         if results:
-            return "Changes applied: " + ", ".join(results)
+            return CallToolResult(
+                content=[
+                    TextContent(
+                        type="text", text="Changes applied: " + ", ".join(results)
+                    )
+                ]
+            )
 
-        return "No changes made and get_items=False"
+        return CallToolResult(
+            content=[
+                TextContent(type="text", text="No changes made and get_items=False")
+            ]
+        )
 
     class QueueItemInput(BaseModel):
         """Input for managing individual queue items."""

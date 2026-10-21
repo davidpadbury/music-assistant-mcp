@@ -1,13 +1,68 @@
 """Player control tools for Music Assistant MCP server."""
 
 from collections.abc import Awaitable, Callable
-from typing import Literal
+from typing import Any, Literal
 
 from mcp.server.mcpserver import MCPServer
+from mcp.types import CallToolResult, TextContent
 from music_assistant_client import MusicAssistantClient
 from pydantic import BaseModel, Field
 
 from ..client import with_reconnect
+
+
+def _player_payload(player) -> dict[str, Any]:
+    """Extract machine-readable player state (single source of truth)."""
+    state = getattr(player, "playback_state", None)
+    active_source = getattr(player, "active_source", None)
+    source_name = None
+    if active_source and active_source != player.player_id:
+        for source in getattr(player, "source_list", []) or []:
+            if getattr(source, "id", None) == active_source:
+                source_name = getattr(source, "name", None)
+                break
+    return {
+        "player_id": player.player_id,
+        "name": player.name,
+        "available": getattr(player, "available", None),
+        "volume_level": getattr(player, "volume_level", None),
+        "volume_muted": getattr(player, "volume_muted", None),
+        "state": state.value if state is not None else None,
+        "group_members": list(getattr(player, "group_members", None) or []),
+        "synced_to": getattr(player, "synced_to", None),
+        "active_source": active_source,
+        "active_source_name": source_name,
+    }
+
+
+def _format_players(payload: list[dict[str, Any]]) -> str:
+    """Render the players payload as human-readable text."""
+    if not payload:
+        return (
+            "No players found. Ensure Music Assistant has player providers configured."
+        )
+
+    lines = ["# Available Players\n"]
+    for p in payload:
+        status_parts = []
+        if p["volume_level"] is not None:
+            status_parts.append(f"Volume: {p['volume_level']}%")
+        if p["volume_muted"]:
+            status_parts.append("(muted)")
+        if p["active_source_name"]:
+            status_parts.append(f"Source: {p['active_source_name']}")
+        if p["group_members"]:
+            status_parts.append(f"Group leader with {len(p['group_members'])} members")
+        elif p["synced_to"]:
+            status_parts.append(f"Synced to: {p['synced_to']}")
+        if p["state"]:
+            status_parts.append(f"State: {p['state']}")
+
+        status = " | ".join(status_parts) if status_parts else "No status"
+        lines.append(f"- **{p['name']}** (`{p['player_id']}`)")
+        lines.append(f"  {status}\n")
+
+    return "\n".join(lines)
 
 
 def register_tools(
@@ -17,66 +72,19 @@ def register_tools(
 
     @mcp.tool()
     @with_reconnect
-    async def ma_list_players() -> str:
+    async def ma_list_players() -> CallToolResult:
         """List all available players with their current state.
 
         Returns player IDs, names, volume levels, and group membership.
         Use this to discover available speakers before controlling them.
-
-        Returns:
-            List of players with: id, name, volume, is_group, group_members
         """
         client = await get_client()
-        players = list(client.players)
+        payload = [_player_payload(player) for player in client.players]
 
-        if not players:
-            return "No players found. Ensure Music Assistant has player providers configured."
-
-        lines = ["# Available Players\n"]
-        for player in players:
-            status_parts = []
-
-            # Volume info
-            if hasattr(player, "volume_level"):
-                status_parts.append(f"Volume: {player.volume_level}%")
-
-            # Mute status
-            if hasattr(player, "volume_muted") and player.volume_muted:
-                status_parts.append("(muted)")
-
-            # Active source (e.g., "TV", "AUX", "Spotify")
-            # Skip if the source is the player's own ID (means Music Assistant is the source)
-            if (
-                hasattr(player, "active_source")
-                and player.active_source
-                and player.active_source != player.player_id
-            ):
-                # Try to look up the friendly name from source_list
-                source_name = player.active_source
-                if hasattr(player, "source_list") and player.source_list:
-                    for source in player.source_list:
-                        if source.id == player.active_source:
-                            source_name = source.name
-                            break
-                status_parts.append(f"Source: {source_name}")
-
-            # Group info
-            if hasattr(player, "group_members") and player.group_members:
-                status_parts.append(
-                    f"Group leader with {len(player.group_members)} members"
-                )
-            elif hasattr(player, "synced_to") and player.synced_to:
-                status_parts.append(f"Synced to: {player.synced_to}")
-
-            # State
-            if hasattr(player, "playback_state"):
-                status_parts.append(f"State: {player.playback_state.value}")
-
-            status = " | ".join(status_parts) if status_parts else "No status"
-            lines.append(f"- **{player.name}** (`{player.player_id}`)")
-            lines.append(f"  {status}\n")
-
-        return "\n".join(lines)
+        return CallToolResult(
+            content=[TextContent(type="text", text=_format_players(payload))],
+            structured_content={"players": payload},
+        )
 
     class VolumeInput(BaseModel):
         """Input for volume control."""

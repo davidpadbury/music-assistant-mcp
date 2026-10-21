@@ -90,7 +90,6 @@ def test_all_tools_register():
 @pytest.mark.asyncio
 async def test_format_queue_state_fetches_items_from_api():
     """Test that format_queue_state fetches items via API, not from queue.items.
-
     The queue.items attribute is an int (count), not a list. This test ensures
     we call get_queue_items() to fetch actual items.
     """
@@ -116,11 +115,108 @@ async def test_format_queue_state_fetches_items_from_api():
 
             return [Item("Track One", "item_1"), Item("Track Two", "item_2")]
 
-    result = await queue.format_queue_state(StubPlayerQueues(), "test_queue")
+    payload = await queue.build_queue_payload(StubPlayerQueues(), "test_queue")
+    result = queue.format_queue_state(payload)
 
     assert "Track One" in result
     assert "Track Two" in result
     assert "item_1" in result
+    assert payload["total_items"] == 2
+    assert payload["items"][0]["name"] == "Track One"
+    assert payload["items"][0]["queue_item_id"] == "item_1"
+
+
+def test_player_payload_extracts_structured_fields():
+    """Player payload has machine-readable fields and text renders from them."""
+    from types import SimpleNamespace as NS
+
+    player = NS(
+        player_id="p1",
+        name="Kitchen",
+        available=True,
+        volume_level=42,
+        volume_muted=False,
+        playback_state=NS(value="playing"),
+        group_members=[],
+        synced_to=None,
+        active_source="src1",
+        source_list=[NS(id="src1", name="TV Input")],
+    )
+    payload = players._player_payload(player)
+    assert payload["player_id"] == "p1"
+    assert payload["volume_level"] == 42
+    assert payload["state"] == "playing"
+    assert payload["active_source_name"] == "TV Input"
+    assert payload["group_members"] == []
+
+    text = players._format_players([payload])
+    assert "Kitchen" in text
+    assert "Volume: 42%" in text
+    assert "State: playing" in text
+
+
+def test_search_payload_splits_name_and_uri():
+    """Search payload separates name, uri, and artist fields (not one blob)."""
+    from types import SimpleNamespace as NS
+
+    results = NS(
+        artists=[],
+        albums=[
+            NS(name="Abbey Road", uri="apple://album/1", artists=[NS(name="Beatles")])
+        ],
+        tracks=[
+            NS(
+                name="Yesterday",
+                uri="apple://track/9",
+                artists=[NS(name="Beatles")],
+                album=NS(name="Help!"),
+            )
+        ],
+        playlists=[],
+        radio=[],
+    )
+
+    payload = music._search_payload("beatles", results, limit=10)
+    track = payload["tracks"][0]
+    assert track["name"] == "Yesterday"
+    assert track["uri"] == "apple://track/9"
+    assert track["artists"] == ["Beatles"]
+    assert track["album"] == "Help!"
+
+    text = music._format_search(payload)
+    assert "Yesterday" in text
+    assert "apple://track/9" in text
+
+
+def test_browse_payload_separates_folders_and_media():
+    """Browse payload keeps navigable paths and media URIs in distinct fields."""
+    from types import SimpleNamespace as NS
+
+    items = [
+        NS(
+            name="Albums",
+            uri="spotify://folder/albums",
+            media_type="folder",
+            is_folder=True,
+        ),
+        NS(
+            name="Thriller",
+            uri="spotify://album/1",
+            media_type="album",
+            is_folder=False,
+        ),
+    ]
+    payload = music._browse_payload("spotify://folder/albums", items, 0, 20)
+    assert payload["folders"] == [
+        {"name": "Albums", "path": "spotify://albums", "type": "folder"}
+    ]
+    assert payload["media"] == [
+        {"name": "Thriller", "uri": "spotify://album/1", "type": "album"}
+    ]
+
+    text = music._format_browse(payload)
+    assert "spotify://albums" in text
+    assert "Thriller" in text
 
 
 @pytest.mark.asyncio
