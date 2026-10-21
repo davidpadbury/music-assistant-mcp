@@ -1,7 +1,7 @@
 """Player control tools for Music Assistant MCP server."""
 
 from collections.abc import Awaitable, Callable
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from mcp.server.mcpserver import MCPServer
 from mcp.types import CallToolResult, TextContent
@@ -9,6 +9,7 @@ from music_assistant_client import MusicAssistantClient
 from pydantic import BaseModel, Field
 
 from ..client import with_reconnect
+from .schemas import PlayersPayload
 
 
 def _player_payload(player) -> dict[str, Any]:
@@ -72,7 +73,7 @@ def register_tools(
 
     @mcp.tool()
     @with_reconnect
-    async def ma_list_players() -> CallToolResult:
+    async def ma_list_players() -> Annotated[CallToolResult, PlayersPayload]:
         """List all available players with their current state.
 
         Returns player IDs, names, volume levels, and group membership.

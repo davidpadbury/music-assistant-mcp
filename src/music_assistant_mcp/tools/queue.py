@@ -1,7 +1,7 @@
 """Queue management tools for Music Assistant MCP server."""
 
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any, Literal, Protocol
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Protocol
 
 from mcp.server.mcpserver import MCPServer
 from mcp.types import CallToolResult, TextContent
@@ -9,6 +9,7 @@ from music_assistant_models.enums import RepeatMode
 from pydantic import BaseModel, Field
 
 from ..client import with_reconnect
+from .schemas import QueueResult
 
 if TYPE_CHECKING:
     from music_assistant_client import MusicAssistantClient
@@ -198,7 +199,7 @@ def register_tools(
 
     @mcp.tool()
     @with_reconnect
-    async def ma_queue(params: QueueInput) -> CallToolResult:
+    async def ma_queue(params: QueueInput) -> Annotated[CallToolResult, QueueResult]:
         """Get queue state and items, or modify queue settings.
 
         Use this to:
@@ -228,18 +229,19 @@ def register_tools(
             await queues.clear(params.queue_id)
             results.append("Queue cleared")
 
+        player_state = None
+        for player in client.players:
+            if player.player_id == params.queue_id:
+                ps = getattr(player, "playback_state", None)
+                player_state = ps.value if ps is not None else None
+                break
+
+        payload = await build_queue_payload(
+            queues, params.queue_id, params.offset, params.limit, player_state
+        )
+
         # Get queue state
         if params.get_items and not params.clear:
-            player_state = None
-            for player in client.players:
-                if player.player_id == params.queue_id:
-                    ps = getattr(player, "playback_state", None)
-                    player_state = ps.value if ps is not None else None
-                    break
-
-            payload = await build_queue_payload(
-                queues, params.queue_id, params.offset, params.limit, player_state
-            )
             output = format_queue_state(payload)
             if results:
                 output = "**Changes applied:** " + ", ".join(results) + "\n\n" + output
@@ -254,13 +256,15 @@ def register_tools(
                     TextContent(
                         type="text", text="Changes applied: " + ", ".join(results)
                     )
-                ]
+                ],
+                structured_content={"queue": payload},
             )
 
         return CallToolResult(
             content=[
                 TextContent(type="text", text="No changes made and get_items=False")
-            ]
+            ],
+            structured_content={"queue": payload},
         )
 
     class QueueItemInput(BaseModel):

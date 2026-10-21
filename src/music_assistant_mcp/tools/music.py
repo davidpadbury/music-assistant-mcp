@@ -1,7 +1,7 @@
 """Music library tools for Music Assistant MCP server."""
 
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Annotated, Any
 
 from mcp.server.mcpserver import MCPServer
 from mcp.types import CallToolResult, TextContent
@@ -10,6 +10,7 @@ from music_assistant_models.enums import MediaType
 from pydantic import BaseModel, Field
 
 from ..client import with_reconnect
+from .schemas import BrowsePayload, SearchPayload
 
 
 def _media_brief(item, media_type: str) -> dict[str, Any]:
@@ -219,7 +220,9 @@ def register_tools(
 
     @mcp.tool()
     @with_reconnect
-    async def ma_search(params: SearchInput) -> CallToolResult:
+    async def ma_search(
+        params: SearchInput,
+    ) -> Annotated[CallToolResult, SearchPayload]:
         """Search for music across all configured providers.
 
         Returns matching artists, albums, tracks, playlists, and radio stations.
@@ -275,7 +278,9 @@ def register_tools(
 
     @mcp.tool()
     @with_reconnect
-    async def ma_browse(params: BrowseInput) -> CallToolResult:
+    async def ma_browse(
+        params: BrowseInput,
+    ) -> Annotated[CallToolResult, BrowsePayload]:
         """Browse music provider content hierarchically.
 
         Start with no path to see available providers, then use returned paths

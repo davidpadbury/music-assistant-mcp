@@ -219,6 +219,24 @@ def test_browse_payload_separates_folders_and_media():
     assert "Thriller" in text
 
 
+def test_read_tools_advertise_output_schemas():
+    """Read tools publish typed outputSchema (ma_* read results)."""
+    mcp = MCPServer("test")
+    players.register_tools(mcp, mock_get_client)
+    music.register_tools(mcp, mock_get_client)
+    queue.register_tools(mcp, mock_get_client)
+
+    tools = {t.name: t for t in mcp._tool_manager.list_tools()}
+    assert tools["ma_list_players"].output_schema["title"] == "PlayersPayload"
+    assert "players" in tools["ma_list_players"].output_schema["properties"]
+    assert tools["ma_search"].output_schema["title"] == "SearchPayload"
+    assert "tracks" in tools["ma_search"].output_schema["properties"]
+    assert tools["ma_browse"].output_schema["title"] == "BrowsePayload"
+    assert "folders" in tools["ma_browse"].output_schema["properties"]
+    assert tools["ma_queue"].output_schema["title"] == "QueueResult"
+    assert "queue" in tools["ma_queue"].output_schema["properties"]
+
+
 @pytest.mark.asyncio
 async def test_with_reconnect_retries_on_connection_error(monkeypatch):
     """Test that with_reconnect decorator retries after ConnectionResetError."""
