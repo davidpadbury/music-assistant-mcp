@@ -1,0 +1,9 @@
+.git
+.venv
+dist
+tests
+integration_tests
+.github
+.mise.toml
+.mise.local.toml
+*.local.toml

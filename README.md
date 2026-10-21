@@ -61,6 +61,37 @@ point a streamable-http client or proxy at the endpoint
 `http://127.0.0.1:8844/mcp`. Keep `MCP_HOST` at `127.0.0.1` unless you are
 deliberately exposing it on your network.
 
+## Running with Docker
+
+Prebuilt images are published to GitHub Container Registry:
+`ghcr.io/davidpadbury/music-assistant-mcp` (tags `latest` and `sha-<commit>`).
+
+```bash
+docker run -d --name music-assistant-mcp -p 8844:8844 \
+  -e MUSIC_ASSISTANT_URL=http://your-server:8095 \
+  -e MUSIC_ASSISTANT_TOKEN=your_token_here \
+  ghcr.io/davidpadbury/music-assistant-mcp
+```
+
+The image serves streamable HTTP on port 8844 over the modern MCP protocol
+(`http://127.0.0.1:8844/mcp`). Set `MCP_TRANSPORT=stdio` to run it in stdio
+mode instead. The token is read from the `MUSIC_ASSISTANT_TOKEN` environment
+variable at runtime — it is never baked into the image.
+
+Compose equivalent:
+
+```yaml
+services:
+  music-assistant-mcp:
+    image: ghcr.io/davidpadbury/music-assistant-mcp:latest
+    ports:
+      - "8844:8844"
+    environment:
+      MUSIC_ASSISTANT_URL: http://your-server:8095
+      MUSIC_ASSISTANT_TOKEN: your_token_here
+    restart: unless-stopped
+```
+
 ## Quick Start
 
 1. **List available speakers**: Use `ma_list_players` to see all speakers and their current state
