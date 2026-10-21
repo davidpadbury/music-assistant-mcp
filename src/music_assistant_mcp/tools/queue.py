@@ -8,7 +8,8 @@ from mcp.types import CallToolResult, TextContent
 from music_assistant_models.enums import RepeatMode
 from pydantic import BaseModel, Field
 
-from ..client import with_reconnect
+from ..client import tool_errors, with_reconnect
+from .result import action_result, error_result
 from .schemas import QueueResult
 
 if TYPE_CHECKING:
@@ -92,6 +93,8 @@ async def build_queue_payload(
             "name": getattr(current, "name", None),
             "artists": artists,
         }
+        if artists:
+            now_playing["artist"] = artists[0]
         if now_index is not None:
             now_playing["index"] = now_index
 
@@ -199,6 +202,7 @@ def register_tools(
 
     @mcp.tool()
     @with_reconnect
+    @tool_errors
     async def ma_queue(params: QueueInput) -> Annotated[CallToolResult, QueueResult]:
         """Get queue state and items, or modify queue settings.
 
@@ -286,7 +290,8 @@ def register_tools(
 
     @mcp.tool()
     @with_reconnect
-    async def ma_queue_item(params: QueueItemInput) -> str:
+    @tool_errors
+    async def ma_queue_item(params: QueueItemInput) -> CallToolResult:
         """Manage individual items in the queue.
 
         Use ma_queue first to see queue items and their IDs, then use this
@@ -303,21 +308,41 @@ def register_tools(
 
         if params.action == "move_up":
             await queues.move_up(params.queue_id, params.item_id)
-            return f"Moved item {params.item_id} up in queue"
+            return action_result(
+                f"Moved item {params.item_id} up in queue",
+                queue_id=params.queue_id,
+                item_id=params.item_id,
+                action="move_up",
+            )
 
         elif params.action == "move_down":
             await queues.move_down(params.queue_id, params.item_id)
-            return f"Moved item {params.item_id} down in queue"
+            return action_result(
+                f"Moved item {params.item_id} down in queue",
+                queue_id=params.queue_id,
+                item_id=params.item_id,
+                action="move_down",
+            )
 
         elif params.action == "move_next":
             await queues.move_next(params.queue_id, params.item_id)
-            return f"Moved item {params.item_id} to play next"
+            return action_result(
+                f"Moved item {params.item_id} to play next",
+                queue_id=params.queue_id,
+                item_id=params.item_id,
+                action="move_next",
+            )
 
         elif params.action == "remove":
             await queues.delete_item(params.queue_id, params.item_id)
-            return f"Removed item {params.item_id} from queue"
+            return action_result(
+                f"Removed item {params.item_id} from queue",
+                queue_id=params.queue_id,
+                item_id=params.item_id,
+                action="remove",
+            )
 
-        return f"Unknown action: {params.action}"
+        return error_result(f"Unknown action: {params.action}")
 
     class TransferQueueInput(BaseModel):
         """Input for transferring a queue between players."""
@@ -327,7 +352,8 @@ def register_tools(
 
     @mcp.tool()
     @with_reconnect
-    async def ma_transfer_queue(params: TransferQueueInput) -> str:
+    @tool_errors
+    async def ma_transfer_queue(params: TransferQueueInput) -> CallToolResult:
         """Transfer playback from one player to another.
 
         Moves the entire playback state (queue, position, settings) from the
@@ -339,4 +365,8 @@ def register_tools(
         await client.player_queues.transfer_queue(
             params.source_queue_id, params.target_queue_id
         )
-        return f"Transferred queue from {params.source_queue_id} to {params.target_queue_id}"
+        return action_result(
+            f"Transferred queue from {params.source_queue_id} to {params.target_queue_id}",
+            source_queue_id=params.source_queue_id,
+            target_queue_id=params.target_queue_id,
+        )

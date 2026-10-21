@@ -1,5 +1,6 @@
 """Music library tools for Music Assistant MCP server."""
 
+import re
 from collections.abc import Awaitable, Callable
 from typing import Annotated, Any
 
@@ -9,7 +10,7 @@ from music_assistant_client import MusicAssistantClient
 from music_assistant_models.enums import MediaType
 from pydantic import BaseModel, Field
 
-from ..client import with_reconnect
+from ..client import tool_errors, with_reconnect
 from .schemas import BrowsePayload, SearchPayload
 
 
@@ -20,9 +21,12 @@ def _media_brief(item, media_type: str) -> dict[str, Any]:
         "uri": getattr(item, "uri", None),
         "media_type": media_type,
     }
-    artists = getattr(item, "artists", None) or []
+    artists = [
+        a.name for a in getattr(item, "artists", None) or [] if getattr(a, "name", None)
+    ]
     if artists:
-        brief["artists"] = [a.name for a in artists if getattr(a, "name", None)]
+        brief["artists"] = artists
+        brief["artist"] = artists[0]
     if media_type == "track":
         album = getattr(item, "album", None)
         if album is not None:
@@ -132,6 +136,34 @@ def _browse_payload(
     }
 
 
+# Matches media URIs from ma_search that resolve to a playable tracklist:
+# e.g. library://album/766, apple_music://album/12345
+_ALBUM_URI = re.compile(r"^(?P<provider>[\w-]+)://album/(?P<item_id>[^/]+)$")
+
+
+def _album_tracklist_payload(
+    uri: str | None, tracks, offset: int, limit: int
+) -> dict[str, Any]:
+    """Build a browse-shaped payload listing an album's tracks."""
+    media = [
+        {
+            "name": getattr(track, "name", None),
+            "uri": getattr(track, "uri", None),
+            "type": "track",
+        }
+        for track in tracks
+    ]
+    return {
+        "path": uri,
+        "total": len(media),
+        "offset": offset,
+        "limit": limit,
+        "folders": [],
+        "media": media[offset : offset + limit],
+        "kind": "album_tracks",
+    }
+
+
 def _format_browse(payload: dict[str, Any]) -> str:
     """Render the browse payload as human-readable text."""
     path = payload["path"]
@@ -161,7 +193,8 @@ def _format_browse(payload: dict[str, Any]) -> str:
         lines.append("")
 
     if media:
-        lines.append("## Media")
+        heading = "Tracks" if payload.get("kind") == "album_tracks" else "Media"
+        lines.append(f"## {heading}")
         type_icon = {
             "artist": "👤",
             "album": "💿",
@@ -220,6 +253,7 @@ def register_tools(
 
     @mcp.tool()
     @with_reconnect
+    @tool_errors
     async def ma_search(
         params: SearchInput,
     ) -> Annotated[CallToolResult, SearchPayload]:
@@ -278,6 +312,7 @@ def register_tools(
 
     @mcp.tool()
     @with_reconnect
+    @tool_errors
     async def ma_browse(
         params: BrowseInput,
     ) -> Annotated[CallToolResult, BrowsePayload]:
@@ -293,10 +328,22 @@ def register_tools(
         """
         client = await get_client()
 
-        # Browse the path (or root if not specified)
-        all_items = await client.music.browse(params.path)
+        # An album URI from ma_search resolves to its tracklist
+        album_match = _ALBUM_URI.match(params.path or "")
+        if album_match:
+            tracks = await client.music.get_album_tracks(
+                album_match["item_id"], album_match["provider"]
+            )
+            payload = _album_tracklist_payload(
+                params.path, tracks, params.offset, params.limit
+            )
+        else:
+            # Browse the path (or root if not specified)
+            all_items = await client.music.browse(params.path)
+            payload = _browse_payload(
+                params.path, all_items, params.offset, params.limit
+            )
 
-        payload = _browse_payload(params.path, all_items, params.offset, params.limit)
         return CallToolResult(
             content=[TextContent(type="text", text=_format_browse(payload))],
             structured_content=payload,

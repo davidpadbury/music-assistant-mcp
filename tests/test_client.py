@@ -10,7 +10,7 @@ from music_assistant_client.exceptions import (
 )
 
 import music_assistant_mcp.client as client_module
-from music_assistant_mcp.client import get_client, with_reconnect
+from music_assistant_mcp.client import get_client, tool_errors, with_reconnect
 
 
 class FakeConnection:
@@ -119,12 +119,26 @@ async def test_with_reconnect_retries_on_client_exceptions(monkeypatch, error):
 
 
 @pytest.mark.asyncio
-async def test_with_reconnect_propagates_cancellation():
-    """with_reconnect must not swallow CancelledError."""
+async def test_tool_errors_propagates_connection_and_cancellation():
+    """tool_errors must not swallow connection errors or cancellation."""
 
     @with_reconnect
-    async def cancellable_function():
+    @tool_errors
+    async def cancelled_function():
         raise asyncio.CancelledError()
 
     with pytest.raises(asyncio.CancelledError):
-        await cancellable_function()
+        await cancelled_function()
+
+
+@pytest.mark.asyncio
+async def test_tool_errors_carries_underlying_reason():
+    """Unexpected failures surface as ToolError with type and message intact."""
+    from mcp.server.mcpserver.exceptions import ToolError
+
+    @tool_errors
+    async def boom():
+        raise RuntimeError("the real reason")
+
+    with pytest.raises(ToolError, match="RuntimeError: the real reason"):
+        await boom()

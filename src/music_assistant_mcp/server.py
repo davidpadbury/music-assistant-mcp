@@ -5,14 +5,25 @@ Provides tools for controlling Music Assistant through the Model Context Protoco
 
 import os
 from collections.abc import Mapping
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as package_version
 
 from mcp.server.mcpserver import MCPServer
 
 from .client import get_client
 from .tools import music, playback, players, queue
 
+
+def _server_version() -> str:
+    """Report the installed package version (feature-pinned images included)."""
+    try:
+        return package_version("ma-mcp-server")
+    except PackageNotFoundError:
+        return "0.0.0"
+
+
 # Create the MCP server
-mcp = MCPServer("music-assistant")
+mcp = MCPServer("music-assistant", version=_server_version())
 
 # Register tools from each module
 players.register_tools(mcp, get_client)

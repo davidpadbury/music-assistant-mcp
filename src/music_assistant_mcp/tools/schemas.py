@@ -5,7 +5,7 @@ is advertised in `tools/list` outputSchema and every structured_content
 payload is validated against them before going on the wire.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class PlayerBrief(BaseModel):
@@ -35,7 +35,14 @@ class MediaBrief(BaseModel):
     name: str | None = None
     uri: str | None = None
     media_type: str
-    artists: list[str] = []
+    artist: str | None = Field(
+        default=None,
+        description="Primary artist name (first of `artists`). Prefer this scalar over the list.",
+    )
+    artists: list[str] = Field(
+        default=[],
+        description="All artist names, in order. This is a LIST, not a scalar.",
+    )
     album: str | None = None
 
 
@@ -76,7 +83,14 @@ class NowPlaying(BaseModel):
 
     queue_item_id: str | None = None
     name: str | None = None
-    artists: list[str] = []
+    artist: str | None = Field(
+        default=None,
+        description="Primary artist name (first of `artists`). Prefer this scalar over the list.",
+    )
+    artists: list[str] = Field(
+        default=[],
+        description="All artist names, in order. This is a LIST, not a scalar.",
+    )
     index: int | None = None
 
 
@@ -117,5 +131,6 @@ class BrowsePayload(BaseModel):
     total: int
     offset: int
     limit: int
+    kind: str = "browse"
     folders: list[BrowseItem] = []
     media: list[BrowseItem] = []

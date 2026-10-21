@@ -4,11 +4,13 @@ from collections.abc import Awaitable, Callable
 from typing import Literal
 
 from mcp.server.mcpserver import MCPServer
+from mcp.types import CallToolResult
 from music_assistant_client import MusicAssistantClient
 from music_assistant_models.enums import QueueOption
 from pydantic import BaseModel, Field
 
-from ..client import with_reconnect
+from ..client import tool_errors, with_reconnect
+from .result import action_result, error_result
 
 
 def register_tools(
@@ -32,7 +34,8 @@ def register_tools(
 
     @mcp.tool()
     @with_reconnect
-    async def ma_playback(params: PlaybackInput) -> str:
+    @tool_errors
+    async def ma_playback(params: PlaybackInput) -> CallToolResult:
         """Control playback state - play, pause, stop, skip tracks, or seek.
 
         Commands:
@@ -51,33 +54,56 @@ def register_tools(
         if params.command == "play":
             if params.seek_seconds is not None:
                 await queues.seek(params.queue_id, params.seek_seconds)
-                return (
-                    f"Seeked to {params.seek_seconds}s and playing on {params.queue_id}"
+                return action_result(
+                    f"Seeked to {params.seek_seconds}s and playing on {params.queue_id}",
+                    queue_id=params.queue_id,
+                    command="play",
+                    seek_seconds=params.seek_seconds,
                 )
             await queues.play(params.queue_id)
-            return f"Playing on {params.queue_id}"
+            return action_result(
+                f"Playing on {params.queue_id}",
+                queue_id=params.queue_id,
+                command="play",
+            )
 
         elif params.command == "pause":
             await queues.pause(params.queue_id)
-            return f"Paused {params.queue_id}"
+            return action_result(
+                f"Paused {params.queue_id}", queue_id=params.queue_id, command="pause"
+            )
 
         elif params.command == "stop":
             await queues.stop(params.queue_id)
-            return f"Stopped {params.queue_id}"
+            return action_result(
+                f"Stopped {params.queue_id}", queue_id=params.queue_id, command="stop"
+            )
 
         elif params.command == "toggle":
             await queues.play_pause(params.queue_id)
-            return f"Toggled play/pause on {params.queue_id}"
+            return action_result(
+                f"Toggled play/pause on {params.queue_id}",
+                queue_id=params.queue_id,
+                command="toggle",
+            )
 
         elif params.command == "next":
             await queues.next(params.queue_id)
-            return f"Skipped to next track on {params.queue_id}"
+            return action_result(
+                f"Skipped to next track on {params.queue_id}",
+                queue_id=params.queue_id,
+                command="next",
+            )
 
         elif params.command == "previous":
             await queues.previous(params.queue_id)
-            return f"Went to previous track on {params.queue_id}"
+            return action_result(
+                f"Went to previous track on {params.queue_id}",
+                queue_id=params.queue_id,
+                command="previous",
+            )
 
-        return f"Unknown command: {params.command}"
+        return error_result(f"Unknown command: {params.command}")
 
     class PlayMediaInput(BaseModel):
         """Input for playing media."""
@@ -103,7 +129,8 @@ def register_tools(
 
     @mcp.tool()
     @with_reconnect
-    async def ma_play_media(params: PlayMediaInput) -> str:
+    @tool_errors
+    async def ma_play_media(params: PlayMediaInput) -> CallToolResult:
         """Play media on a player/queue.
 
         First use ma_search to find media and get URIs, then use this tool to play them.
@@ -145,4 +172,10 @@ def register_tools(
         }[params.option]
 
         radio_note = " (radio mode enabled)" if params.radio_mode else ""
-        return f"{action} {media_count} item(s) on {params.queue_id}{radio_note}"
+        return action_result(
+            f"{action} {media_count} item(s) on {params.queue_id}{radio_note}",
+            queue_id=params.queue_id,
+            option=params.option,
+            media_count=media_count,
+            radio_mode=params.radio_mode,
+        )

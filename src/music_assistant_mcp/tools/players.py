@@ -8,7 +8,8 @@ from mcp.types import CallToolResult, TextContent
 from music_assistant_client import MusicAssistantClient
 from pydantic import BaseModel, Field
 
-from ..client import with_reconnect
+from ..client import tool_errors, with_reconnect
+from .result import action_result, error_result
 from .schemas import PlayersPayload
 
 
@@ -73,6 +74,7 @@ def register_tools(
 
     @mcp.tool()
     @with_reconnect
+    @tool_errors
     async def ma_list_players() -> Annotated[CallToolResult, PlayersPayload]:
         """List all available players with their current state.
 
@@ -110,7 +112,8 @@ def register_tools(
 
     @mcp.tool()
     @with_reconnect
-    async def ma_volume(params: VolumeInput) -> str:
+    @tool_errors
+    async def ma_volume(params: VolumeInput) -> CallToolResult:
         """Control volume for a single player - set level, adjust up/down, or mute/unmute.
 
         Provide exactly one of: level, adjust, or mute.
@@ -134,29 +137,47 @@ def register_tools(
         )
 
         if options_provided == 0:
-            return "Error: Provide one of: level (0-100), adjust ('up'/'down'), or mute (true/false)"
+            return error_result(
+                "Error: Provide one of: level (0-100), adjust ('up'/'down'), or mute (true/false)"
+            )
 
         if options_provided > 1:
-            return "Error: Provide only one of: level, adjust, or mute"
+            return error_result("Error: Provide only one of: level, adjust, or mute")
 
         if params.level is not None:
             await client.players.volume_set(params.player_id, params.level)
-            return f"Volume set to {params.level}% on {params.player_id}"
+            return action_result(
+                f"Volume set to {params.level}% on {params.player_id}",
+                player_id=params.player_id,
+                volume_level=params.level,
+            )
 
         if params.adjust is not None:
             if params.adjust == "up":
                 await client.players.volume_up(params.player_id)
-                return f"Volume increased on {params.player_id}"
+                return action_result(
+                    f"Volume increased on {params.player_id}",
+                    player_id=params.player_id,
+                    adjust="up",
+                )
             else:
                 await client.players.volume_down(params.player_id)
-                return f"Volume decreased on {params.player_id}"
+                return action_result(
+                    f"Volume decreased on {params.player_id}",
+                    player_id=params.player_id,
+                    adjust="down",
+                )
 
         if params.mute is not None:
             await client.players.volume_mute(params.player_id, params.mute)
             state = "muted" if params.mute else "unmuted"
-            return f"Player {params.player_id} {state}"
+            return action_result(
+                f"Player {params.player_id} {state}",
+                player_id=params.player_id,
+                muted=params.mute,
+            )
 
-        return "Error: No action specified"
+        return error_result("Error: No action specified")
 
     class GroupVolumeInput(BaseModel):
         """Input for group volume control."""
@@ -177,7 +198,8 @@ def register_tools(
 
     @mcp.tool()
     @with_reconnect
-    async def ma_group_volume(params: GroupVolumeInput) -> str:
+    @tool_errors
+    async def ma_group_volume(params: GroupVolumeInput) -> CallToolResult:
         """Control volume for all players in a speaker group.
 
         Adjusts volume for all players that are grouped together. The player_id
@@ -194,21 +216,35 @@ def register_tools(
 
         # Validate exactly one option provided
         if params.level is None and params.adjust is None:
-            return "Error: Provide either level (0-100) or adjust ('up'/'down')"
+            return error_result(
+                "Error: Provide either level (0-100) or adjust ('up'/'down')"
+            )
 
         if params.level is not None and params.adjust is not None:
-            return "Error: Provide only one of: level or adjust"
+            return error_result("Error: Provide only one of: level or adjust")
 
         if params.level is not None:
             await client.players.group_volume(params.player_id, params.level)
-            return f"Group volume set to {params.level}% on {params.player_id}"
+            return action_result(
+                f"Group volume set to {params.level}% on {params.player_id}",
+                player_id=params.player_id,
+                volume_level=params.level,
+            )
 
         if params.adjust == "up":
             await client.players.group_volume_up(params.player_id)
-            return f"Group volume increased on {params.player_id}"
+            return action_result(
+                f"Group volume increased on {params.player_id}",
+                player_id=params.player_id,
+                adjust="up",
+            )
         else:
             await client.players.group_volume_down(params.player_id)
-            return f"Group volume decreased on {params.player_id}"
+            return action_result(
+                f"Group volume decreased on {params.player_id}",
+                player_id=params.player_id,
+                adjust="down",
+            )
 
     class GroupInput(BaseModel):
         """Input for speaker grouping."""
@@ -224,7 +260,8 @@ def register_tools(
 
     @mcp.tool()
     @with_reconnect
-    async def ma_group(params: GroupInput) -> str:
+    @tool_errors
+    async def ma_group(params: GroupInput) -> CallToolResult:
         """Manage speaker groups - join players together or remove from groups.
 
         For 'join': Syncs the specified players to a target player (the group leader).
@@ -238,7 +275,9 @@ def register_tools(
 
         if params.action == "join":
             if not params.target_player_id:
-                return "Error: target_player_id is required when joining a group"
+                return error_result(
+                    "Error: target_player_id is required when joining a group"
+                )
 
             if len(params.player_ids) == 1:
                 await client.players.group(
@@ -250,7 +289,12 @@ def register_tools(
                 )
 
             player_list = ", ".join(params.player_ids)
-            return f"Players [{player_list}] joined to group led by {params.target_player_id}"
+            return action_result(
+                f"Players [{player_list}] joined to group led by {params.target_player_id}",
+                action="join",
+                player_ids=params.player_ids,
+                target_player_id=params.target_player_id,
+            )
 
         else:  # leave
             if len(params.player_ids) == 1:
@@ -259,7 +303,11 @@ def register_tools(
                 await client.players.ungroup_many(params.player_ids)
 
             player_list = ", ".join(params.player_ids)
-            return f"Players [{player_list}] removed from their groups"
+            return action_result(
+                f"Players [{player_list}] removed from their groups",
+                action="leave",
+                player_ids=params.player_ids,
+            )
 
     class AnnounceInput(BaseModel):
         """Input for announcements."""
@@ -292,7 +340,8 @@ def register_tools(
 
     @mcp.tool()
     @with_reconnect
-    async def ma_announce(params: AnnounceInput) -> str:
+    @tool_errors
+    async def ma_announce(params: AnnounceInput) -> CallToolResult:
         """Play an announcement (spoken message or audio file) on a player.
 
         Provide exactly one of: message (text to speak) or url (audio file).
@@ -303,7 +352,7 @@ def register_tools(
         - Quiet announcement: player_id="bedroom", message="Time to wake up", volume_level=30
         """
         if (params.message is None) == (params.url is None):
-            return (
+            return error_result(
                 "Error: Provide exactly one of: message (TTS text) or url (audio file)"
             )
 
@@ -317,7 +366,13 @@ def register_tools(
             tts_engine=params.tts_engine,
         )
         what = f"message: {params.message}" if params.message else f"url: {params.url}"
-        return f"Announcement played on {params.player_id} ({what})"
+        return action_result(
+            f"Announcement played on {params.player_id} ({what})",
+            player_id=params.player_id,
+            message=params.message,
+            url=params.url,
+            volume_level=params.volume_level,
+        )
 
     class SelectSourceInput(BaseModel):
         """Input for source selection."""
@@ -334,7 +389,8 @@ def register_tools(
 
     @mcp.tool()
     @with_reconnect
-    async def ma_select_source(params: SelectSourceInput) -> str:
+    @tool_errors
+    async def ma_select_source(params: SelectSourceInput) -> CallToolResult:
         """Select an input source on a player.
 
         Switches the player's active input, e.g. from Music Assistant playback to
@@ -347,4 +403,8 @@ def register_tools(
         """
         client = await get_client()
         await client.players.select_source(params.player_id, params.source)
-        return f"Source set to {params.source} on {params.player_id}"
+        return action_result(
+            f"Source set to {params.source} on {params.player_id}",
+            player_id=params.player_id,
+            source=params.source,
+        )

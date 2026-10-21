@@ -4,7 +4,7 @@ import pytest
 from mcp.server.mcpserver import MCPServer
 
 from music_assistant_mcp.client import with_reconnect
-from music_assistant_mcp.tools import music, playback, players, queue
+from music_assistant_mcp.tools import music, playback, players, queue, result
 
 
 async def mock_get_client():
@@ -181,7 +181,9 @@ def test_search_payload_splits_name_and_uri():
     assert track["name"] == "Yesterday"
     assert track["uri"] == "apple://track/9"
     assert track["artists"] == ["Beatles"]
+    assert track["artist"] == "Beatles"
     assert track["album"] == "Help!"
+    assert payload["albums"][0]["artist"] == "Beatles"
 
     text = music._format_search(payload)
     assert "Yesterday" in text
@@ -235,6 +237,70 @@ def test_read_tools_advertise_output_schemas():
     assert "folders" in tools["ma_browse"].output_schema["properties"]
     assert tools["ma_queue"].output_schema["title"] == "QueueResult"
     assert "queue" in tools["ma_queue"].output_schema["properties"]
+
+
+def test_action_result_builds_assertable_payload():
+    """Mutation results carry ok=True plus the changed fields."""
+    res = result.action_result(
+        "Volume set to 12% on p1", player_id="p1", volume_level=12
+    )
+    assert res.structured_content == {"ok": True, "player_id": "p1", "volume_level": 12}
+    assert res.content[0].text == "Volume set to 12% on p1"
+
+
+def test_error_result_builds_failure_payload():
+    """Validation failures carry ok=False with the reason."""
+    res = result.error_result("Provide one of: level, adjust, or mute")
+    assert res.structured_content == {
+        "ok": False,
+        "error": "Provide one of: level, adjust, or mute",
+    }
+
+
+def test_album_uri_pattern_matches_album_uris_only():
+    """Album URIs from ma_search are recognized for tracklist lookups."""
+    m = music._ALBUM_URI.match("apple_music://album/12345")
+    assert m is not None
+    assert m["provider"] == "apple_music"
+    assert m["item_id"] == "12345"
+    assert music._ALBUM_URI.match("library://album/766") is not None
+    assert music._ALBUM_URI.match("apple_music://track/1") is None
+    assert music._ALBUM_URI.match("spotify://folder/albums") is None
+
+
+def test_album_tracklist_payload_lists_tracks():
+    """An album URI resolves to its tracklist, paginated."""
+    from types import SimpleNamespace as NS
+
+    tracks = [
+        NS(
+            name="T1",
+            uri="library://track/1",
+            artists=[NS(name="A")],
+            media_type="track",
+        ),
+        NS(
+            name="T2",
+            uri="library://track/2",
+            artists=[NS(name="B")],
+            media_type="track",
+        ),
+        NS(
+            name="T3",
+            uri="library://track/3",
+            artists=[NS(name="C")],
+            media_type="track",
+        ),
+    ]
+    payload = music._album_tracklist_payload("library://album/7", tracks, 1, 2)
+    assert payload["kind"] == "album_tracks"
+    assert payload["total"] == 3
+    assert [m["name"] for m in payload["media"]] == ["T2", "T3"]
+    assert payload["media"][0]["type"] == "track"
+
+    text = music._format_browse(payload)
+    assert "## Tracks" in text
+    assert "library://track/2" in text
 
 
 @pytest.mark.asyncio

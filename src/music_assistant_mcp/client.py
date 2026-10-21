@@ -6,6 +6,7 @@ import os
 from collections.abc import Awaitable, Callable
 from typing import TypeVar
 
+from mcp.server.mcpserver.exceptions import ToolError
 from music_assistant_client import MusicAssistantClient
 from music_assistant_client.exceptions import (
     CannotConnect,
@@ -230,5 +231,27 @@ def with_reconnect(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable
             await force_reconnect()
             # Retry once - the function will call get_client() again
             return await func(*args, **kwargs)
+
+    return wrapper
+
+
+def tool_errors(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
+    """Turn unexpected tool failures into ToolError carrying the underlying reason.
+
+    The MCP SDK deliberately strips the message from unhandled crashes, so the
+    client would otherwise see a bare 'Error executing tool <name>' with no
+    detail. Connection errors and deliberate ToolError pass through so
+    with_reconnect can retry and validation errors keep their own text.
+    """
+    import functools
+
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs) -> T:
+        try:
+            return await func(*args, **kwargs)
+        except (ToolError, asyncio.CancelledError, *CONNECTION_ERRORS):
+            raise
+        except Exception as exc:
+            raise ToolError(f"{type(exc).__name__}: {exc}") from exc
 
     return wrapper

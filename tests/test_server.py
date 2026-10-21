@@ -5,6 +5,13 @@ import pytest
 from music_assistant_mcp import server
 
 
+def test_server_version_reports_installed_package():
+    """serverInfo.version comes from the installed distribution."""
+    v = server._server_version()
+    assert v.count(".") >= 1  # X.Y or X.Y.Z
+    assert v != "0.0.0"
+
+
 def test_main_rejects_unknown_transport(monkeypatch):
     """An unsupported MCP_TRANSPORT value fails loudly instead of silently falling back."""
     monkeypatch.setenv("MCP_TRANSPORT", "bogus")
