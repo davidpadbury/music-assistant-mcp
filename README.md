@@ -35,6 +35,32 @@ Add this configuration to:
 - **Claude Code**: `~/.claude.json`
 - **Cursor**: Settings > MCP
 
+## Running over HTTP (modern MCP protocol)
+
+By default the server speaks stdio, which is limited to MCP protocol version
+2025-11-25. To serve over streamable HTTP — required by proxies and clients
+that only support the 2026-07-28 protocol — run with:
+
+```json
+{
+  "command": "uvx",
+  "args": ["--from", "git+https://github.com/davidpadbury/music-assistant-mcp", "music-assistant-mcp"],
+  "env": {
+    "MUSIC_ASSISTANT_URL": "http://your-server:8095",
+    "MUSIC_ASSISTANT_TOKEN": "your_token_here",
+    "MCP_TRANSPORT": "streamable-http",
+    "MCP_HOST": "127.0.0.1",
+    "MCP_PORT": "8844"
+  }
+}
+```
+
+Run this as a standalone process (shell, systemd, or your container runtime) —
+unlike the stdio config above, it is not spawned per-request by a client — and
+point a streamable-http client or proxy at the endpoint
+`http://127.0.0.1:8844/mcp`. Keep `MCP_HOST` at `127.0.0.1` unless you are
+deliberately exposing it on your network.
+
 ## Quick Start
 
 1. **List available speakers**: Use `ma_list_players` to see all speakers and their current state
